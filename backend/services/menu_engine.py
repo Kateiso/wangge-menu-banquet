@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import httpx
 from openai import OpenAI
 from sqlmodel import Session, select
@@ -17,10 +18,13 @@ _client = None
 def get_client() -> OpenAI:
     global _client
     if _client is None:
+        # 绕过系统 SOCKS 代理，使用 HTTP 代理或直连
+        http_proxy = os.environ.get("http_proxy", "")
+        proxy = http_proxy if http_proxy.startswith("http://") else None
         _client = OpenAI(
             api_key=DEEPSEEK_API_KEY,
             base_url="https://api.deepseek.com",
-            http_client=httpx.Client(proxy=None),
+            http_client=httpx.Client(proxy=proxy),
         )
     return _client
 
