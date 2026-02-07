@@ -42,9 +42,9 @@ function App() {
     setLoading(true);
     setMenu(null);
 
-    // 30s 超时
+    // 60s 超时（LLM 配菜含预算校验可能需要 2 次 API 调用）
     const timeout = new Promise<never>((_, reject) => {
-      timerRef.current = setTimeout(() => reject(new Error('timeout')), 30000);
+      timerRef.current = setTimeout(() => reject(new Error('timeout')), 60000);
     });
 
     try {

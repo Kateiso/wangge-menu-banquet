@@ -52,21 +52,28 @@ def build_dish_catalog(session: Session) -> str:
 
 
 def build_prompt(request: MenuGenerateRequest, catalog: str) -> str:
+    dish_count = request.party_size + 3
+    avg_price = int(request.budget / dish_count)
+    budget_low = int(request.budget * 0.90)
+    budget_high = int(request.budget * 1.05)
     return f"""## 角色
 你是旺阁渔村的AI点菜助手，擅长根据客户需求搭配菜品。
 
 ## 配菜规则
-1. 菜品总数 = 人数 + 2~4 道（人数{request.party_size}人，推荐 {request.party_size + 2} 到 {request.party_size + 4} 道菜）
-2. 结构: 凉菜2-4道(约20%) / 热菜≥3道(约60%) / 汤羹1道 / 主食1-2道 / 甜品或点心1-2道
-3. 预算控制【最重要】: 总价必须尽量接近 {request.budget} 元（允许范围 {int(request.budget * 0.95)}~{int(request.budget * 1.05)} 元）。宁可多点一道菜或增加数量，也不要让预算大量剩余。
+1. 菜品总数: 约 {dish_count} 道菜（人数{request.party_size}人）
+2. 结构: 凉菜2-4道 / 热菜≥3道 / 汤羹1道 / 主食1-2道 / 甜品或点心1-2道
+3. 预算控制【最重要】:
+   - 目标总价: {request.budget} 元，允许范围 {budget_low}~{budget_high} 元
+   - 每道菜平均约 {avg_price} 元（含数量），请选菜时边选边算，确保总价落在目标范围
+   - 如果选的菜偏便宜，就多选几道或增加按只/件计价菜品的数量来凑满预算
+   - 按只/件计价的菜（乳鸽、T骨等），数量按人数配（{request.party_size}人点{request.party_size}只/件）
 4. 毛利控制: 目标整单毛利率 {request.target_margin}%，优先选高毛利菜品但不牺牲菜品档次
 5. 多样性: 烹饪方式≥4种、口味≥3种、食材≥3种
-6. 按件/只/位计价的菜品（如乳鸽53元/只、T骨13.9元/件），数量需要根据人数合理配置
-7. 不要重复选同一道菜
+6. 不要重复选同一道菜
 
 ## 客户需求
 - 人数: {request.party_size}人
-- 预算: {request.budget}元
+- 预算: {request.budget}元（必须花到 {budget_low}~{budget_high} 元）
 - 毛利目标: {request.target_margin}%
 - 场合: {request.occasion or "普通聚餐"}
 - 偏好: {request.preferences or "无特殊要求"}
@@ -81,6 +88,7 @@ def build_prompt(request: MenuGenerateRequest, catalog: str) -> str:
   "menu": [
     {{"dish_id": 24, "quantity": 6, "reason": "招牌必点，人均1只"}}
   ],
+  "total_estimate": {request.budget},
   "reasoning": "本套餐以粤菜为主，兼顾..."
 }}
 ```
@@ -89,7 +97,9 @@ def build_prompt(request: MenuGenerateRequest, catalog: str) -> str:
 - dish_id 必须是上面菜品列表中存在的 # 号后数字
 - quantity 是点菜数量（按份/例/只计）
 - reason 是推荐该菜的简短理由
-- reasoning 是整体配菜思路说明"""
+- total_estimate 是你估算的菜品总价（必须在 {budget_low}~{budget_high} 范围内）
+- reasoning 是整体配菜思路说明
+- 选完菜后请自行加总验算，如果总价低于 {budget_low} 元，请增加菜品或数量"""
 
 
 def call_deepseek(prompt: str) -> dict:
@@ -215,7 +225,7 @@ def generate_menu(session: Session, request: MenuGenerateRequest) -> tuple[Menu,
 
     logger.info(f"调用 DeepSeek 为 {request.party_size} 人配菜，预算 {request.budget} 元")
 
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             llm_result = call_deepseek(prompt)
             menu, items = validate_and_build_menu(session, request, llm_result)
@@ -223,9 +233,9 @@ def generate_menu(session: Session, request: MenuGenerateRequest) -> tuple[Menu,
                 logger.warning(f"第 {attempt + 1} 次尝试未生成有效菜单，重试")
                 continue
 
-            # 检查预算利用率，低于 85% 则重试
+            # 检查预算利用率，低于 75% 则重试（仅第一次）
             budget_ratio = menu.total_price / request.budget if request.budget > 0 else 1
-            if budget_ratio < 0.85 and attempt < 2:
+            if budget_ratio < 0.75 and attempt < 1:
                 logger.warning(
                     f"第 {attempt + 1} 次预算利用率仅 {budget_ratio:.0%}"
                     f"（{menu.total_price:.0f}/{request.budget}），重试"
@@ -246,7 +256,7 @@ def generate_menu(session: Session, request: MenuGenerateRequest) -> tuple[Menu,
             return menu, items
         except Exception as e:
             logger.error(f"第 {attempt + 1} 次尝试失败: {e}")
-            if attempt == 2:
+            if attempt == 1:
                 raise
 
     raise ValueError("无法生成有效菜单，请重试")
