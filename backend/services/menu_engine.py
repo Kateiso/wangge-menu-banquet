@@ -58,7 +58,7 @@ def build_prompt(request: MenuGenerateRequest, catalog: str) -> str:
 ## 配菜规则
 1. 菜品总数 = 人数 + 2~4 道（人数{request.party_size}人，推荐 {request.party_size + 2} 到 {request.party_size + 4} 道菜）
 2. 结构: 凉菜2-4道(约20%) / 热菜≥3道(约60%) / 汤羹1道 / 主食1-2道 / 甜品或点心1-2道
-3. 预算控制: 总价不超过 {request.budget} 元
+3. 预算控制【最重要】: 总价必须尽量接近 {request.budget} 元（允许范围 {int(request.budget * 0.95)}~{int(request.budget * 1.05)} 元）。宁可多点一道菜或增加数量，也不要让预算大量剩余。
 4. 毛利控制: 目标整单毛利率 {request.target_margin}%，优先选高毛利菜品但不牺牲菜品档次
 5. 多样性: 烹饪方式≥4种、口味≥3种、食材≥3种
 6. 按件/只/位计价的菜品（如乳鸽53元/只、T骨13.9元/件），数量需要根据人数合理配置
@@ -209,23 +209,44 @@ def validate_and_build_menu(
 
 
 def generate_menu(session: Session, request: MenuGenerateRequest) -> tuple[Menu, list[MenuItem]]:
-    """完整流程: 构建 Prompt → 调用 LLM → 后验证 → 存 DB"""
+    """完整流程: 构建 Prompt → 调用 LLM → 后验证 → 存 DB（预算不足自动重试）"""
     catalog = build_dish_catalog(session)
     prompt = build_prompt(request, catalog)
 
     logger.info(f"调用 DeepSeek 为 {request.party_size} 人配菜，预算 {request.budget} 元")
 
-    # 最多重试1次
-    for attempt in range(2):
+    for attempt in range(3):
         try:
             llm_result = call_deepseek(prompt)
             menu, items = validate_and_build_menu(session, request, llm_result)
-            if items:
-                return menu, items
-            logger.warning(f"第 {attempt + 1} 次尝试未生成有效菜单，重试")
+            if not items:
+                logger.warning(f"第 {attempt + 1} 次尝试未生成有效菜单，重试")
+                continue
+
+            # 检查预算利用率，低于 85% 则重试
+            budget_ratio = menu.total_price / request.budget if request.budget > 0 else 1
+            if budget_ratio < 0.85 and attempt < 2:
+                logger.warning(
+                    f"第 {attempt + 1} 次预算利用率仅 {budget_ratio:.0%}"
+                    f"（{menu.total_price:.0f}/{request.budget}），重试"
+                )
+                # 回滚本次结果
+                session.delete(menu)
+                for item in items:
+                    session.delete(item)
+                session.commit()
+                # 补充强调提示重新生成
+                prompt = build_prompt(request, catalog) + f"""
+
+## 特别注意
+上一次配菜总价仅 {menu.total_price:.0f} 元，远低于预算 {request.budget} 元（利用率 {budget_ratio:.0%}）。
+请增加菜品数量或选择更高档的菜品，确保总价接近 {request.budget} 元。"""
+                continue
+
+            return menu, items
         except Exception as e:
             logger.error(f"第 {attempt + 1} 次尝试失败: {e}")
-            if attempt == 1:
+            if attempt == 2:
                 raise
 
     raise ValueError("无法生成有效菜单，请重试")
