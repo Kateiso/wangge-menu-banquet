@@ -107,8 +107,8 @@ DEFAULT_MARGIN=55          # Default target margin %
 - Auto git commit on changes (per user preference)
 
 ### Worktree 注意事项
-- `.env` 文件只在主仓库根目录，worktree 需要创建符号链接：`ln -s /主仓库/.env /worktree/.env`
-- `.venv` 也在主仓库，worktree 中用 `source /主仓库/.venv/bin/activate`
+- `.env` 查找已自动化：`config.py` 从 `backend/` 向上遍历目录树，主仓库和 worktree 都能自动定位
+- `.venv` 在主仓库，worktree 中用 `source /主仓库/.venv/bin/activate`
 - 新增 DB 表后需 `rm menu.db` 重建
 
 ## Current Progress — feat/conversation-adjust 分支
