@@ -1,5 +1,6 @@
 import csv
 import re
+import hashlib
 from sqlmodel import Session, select
 from backend.models.dish import Dish
 from backend.config import CSV_PATH
@@ -110,8 +111,20 @@ def import_dishes_from_csv(session: Session) -> int:
 
             tags = build_tags(row)
 
-            # 成本默认: 售价 × 40%
-            cost = round(price * 0.4, 2)
+            # 成本按品类基准 + 菜品名哈希微调，模拟真实差异
+            base_cost_ratio = {
+                "凉菜": 0.28,   # 毛利高，~72%
+                "热菜": 0.38,   # 中等，~62%
+                "汤羹": 0.30,   # 汤水成本低，~70%
+                "主食": 0.25,   # 毛利最高，~75%
+                "甜品": 0.32,   # ~68%
+                "点心": 0.30,   # ~70%
+            }
+            ratio = base_cost_ratio.get(category, 0.35)
+            # 用菜名哈希生成 ±0.08 的浮动，让每道菜不一样
+            name_hash = int(hashlib.md5(name.encode()).hexdigest()[:8], 16)
+            jitter = ((name_hash % 160) - 80) / 1000  # -0.08 ~ +0.08
+            cost = round(price * max(0.15, min(0.55, ratio + jitter)), 2)
 
             dish = Dish(
                 name=name,
