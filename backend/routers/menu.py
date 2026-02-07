@@ -1,3 +1,4 @@
+from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
@@ -77,9 +78,10 @@ def api_download_excel(
     excel_file = generate_excel(menu, items)
 
     filename = f"旺阁渔村_菜单_{menu.customer_name or '贵宾'}_{menu.party_size}人.xlsx"
+    encoded = quote(filename)
 
     return StreamingResponse(
         excel_file,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"},
     )

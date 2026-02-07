@@ -60,9 +60,10 @@ async def auth_middleware(request: Request, call_next):
     ):
         return await call_next(request)
 
-    # 检查 Authorization header
+    # 检查 Authorization header 或 URL token 参数（用于 Excel 下载等）
     auth = request.headers.get("Authorization", "")
-    if auth != f"Bearer {APP_PASSWORD}":
+    url_token = request.query_params.get("token", "")
+    if auth != f"Bearer {APP_PASSWORD}" and url_token != APP_PASSWORD:
         return JSONResponse(status_code=401, content={"detail": "未授权"})
 
     return await call_next(request)
