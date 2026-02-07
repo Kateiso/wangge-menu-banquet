@@ -3,11 +3,46 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from backend.models.menu import Menu, MenuItem
-from backend.models.schemas import MenuGenerateRequest, MenuResponse, MenuItemResponse
+from backend.models.schemas import (
+    MenuGenerateRequest, MenuResponse, MenuItemResponse,
+    AdjustRequest, AdjustResponse,
+)
 from backend.services.menu_engine import generate_menu
 from backend.services.excel_generator import generate_excel
+from backend.services.adjustment_engine import analyze_adjustment_intent, execute_adjustment
 
 router = APIRouter(prefix="/api/menu", tags=["menu"])
+
+
+def _build_menu_response(menu: Menu, items: list[MenuItem], date: str = "") -> MenuResponse:
+    return MenuResponse(
+        id=menu.id,
+        customer_name=menu.customer_name,
+        party_size=menu.party_size,
+        budget=menu.budget,
+        target_margin=menu.target_margin,
+        occasion=menu.occasion,
+        total_price=menu.total_price,
+        total_cost=menu.total_cost,
+        margin_rate=menu.margin_rate,
+        reasoning=menu.reasoning,
+        date=date,
+        items=[
+            MenuItemResponse(
+                dish_id=item.dish_id,
+                dish_name=item.dish_name,
+                price_text=item.price_text,
+                price=item.price,
+                cost=item.cost,
+                quantity=item.quantity,
+                subtotal=item.subtotal,
+                cost_total=item.cost_total,
+                category=item.category,
+                reason=item.reason,
+            )
+            for item in items
+        ],
+    )
 
 
 def get_session():
@@ -28,34 +63,37 @@ def api_generate_menu(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"菜单生成失败: {str(e)}")
 
-    return MenuResponse(
-        id=menu.id,
-        customer_name=menu.customer_name,
-        party_size=menu.party_size,
-        budget=menu.budget,
-        target_margin=menu.target_margin,
-        occasion=menu.occasion,
-        total_price=menu.total_price,
-        total_cost=menu.total_cost,
-        margin_rate=menu.margin_rate,
-        reasoning=menu.reasoning,
-        date=request.date,
-        items=[
-            MenuItemResponse(
-                dish_id=item.dish_id,
-                dish_name=item.dish_name,
-                price_text=item.price_text,
-                price=item.price,
-                cost=item.cost,
-                quantity=item.quantity,
-                subtotal=item.subtotal,
-                cost_total=item.cost_total,
-                category=item.category,
-                reason=item.reason,
-            )
-            for item in items
-        ],
-    )
+    return _build_menu_response(menu, items, date=request.date)
+
+
+@router.post("/{menu_id}/adjust", response_model=AdjustResponse)
+def api_adjust_menu(
+    menu_id: str,
+    request: AdjustRequest,
+    session: Session = Depends(get_session),
+):
+    """调整菜单 — 对话或确认"""
+    menu = session.get(Menu, menu_id)
+    if not menu:
+        raise HTTPException(status_code=404, detail="菜单不存在")
+
+    if request.action == "confirm":
+        if not request.conversation_id:
+            raise HTTPException(status_code=400, detail="缺少 conversation_id")
+        try:
+            updated_menu, items = execute_adjustment(session, menu_id, request.conversation_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"执行调整失败: {str(e)}")
+        return AdjustResponse(
+            type="updated",
+            message="菜单已更新",
+            menu=_build_menu_response(updated_menu, items),
+        )
+    else:
+        try:
+            return analyze_adjustment_intent(session, menu_id, request.message)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"分析意图失败: {str(e)}")
 
 
 @router.get("/{menu_id}/excel")

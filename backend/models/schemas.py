@@ -42,3 +42,22 @@ class MenuResponse(BaseModel):
 
 class AuthRequest(BaseModel):
     password: str
+
+
+class AdjustmentAction(BaseModel):
+    remove: list[int] = []
+    add: list[dict] = []  # [{dish_id, quantity, reason}]
+
+
+class AdjustRequest(BaseModel):
+    message: str = ""
+    action: str = "chat"  # "chat" | "confirm"
+    conversation_id: int | None = None
+
+
+class AdjustResponse(BaseModel):
+    type: str  # "ask" | "suggest" | "updated"
+    message: str
+    action: AdjustmentAction | None = None
+    conversation_id: int | None = None
+    menu: Optional[MenuResponse] = None

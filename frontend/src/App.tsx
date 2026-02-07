@@ -139,7 +139,7 @@ function App() {
             退出
           </Button>
         </Header>
-        <Content style={{ padding: '24px', maxWidth: 1000, margin: '0 auto', width: '100%' }}>
+        <Content style={{ padding: '24px', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
           {!menu && !loading && <OrderForm onSubmit={handleSubmit} loading={loading} />}
 
           {loading && (
@@ -159,6 +159,7 @@ function App() {
               <MenuPreview
                 menu={menu}
                 onRegenerate={handleRegenerate}
+                onMenuUpdated={(updated) => setMenu(updated)}
                 loading={loading}
               />
               <div style={{ textAlign: 'center', marginTop: 16 }}>

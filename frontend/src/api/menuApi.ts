@@ -83,6 +83,46 @@ export function getExcelUrl(menuId: string): string {
   return `${BASE}/api/menu/${menuId}/excel?token=${getToken()}`;
 }
 
+export interface AdjustAction {
+  remove: number[];
+  add: { dish_id: number; quantity: number; reason: string }[];
+}
+
+export interface AdjustResponse {
+  type: 'ask' | 'suggest' | 'updated';
+  message: string;
+  action: AdjustAction | null;
+  conversation_id: number | null;
+  menu: MenuData | null;
+}
+
+export async function adjustMenu(
+  menuId: string,
+  message: string,
+  action: 'chat' | 'confirm' = 'chat',
+  conversationId?: number,
+): Promise<AdjustResponse> {
+  const res = await fetch(`${BASE}/api/menu/${menuId}/adjust`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({
+      message,
+      action,
+      conversation_id: conversationId ?? null,
+    }),
+  });
+  if (res.status === 401) {
+    localStorage.removeItem('wg_token');
+    window.location.reload();
+    throw new Error('未授权');
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '请求失败' }));
+    throw new Error(err.detail || '调整失败');
+  }
+  return res.json();
+}
+
 export async function downloadExcel(menuId: string): Promise<void> {
   const res = await fetch(`${BASE}/api/menu/${menuId}/excel`, {
     headers: { Authorization: `Bearer ${getToken()}` },

@@ -8,6 +8,7 @@ from sqlmodel import SQLModel, Session, create_engine
 from backend.config import DATABASE_URL, APP_PASSWORD
 from backend.models.dish import Dish  # noqa: F401 - needed for table creation
 from backend.models.menu import Menu, MenuItem  # noqa: F401
+from backend.models.conversation import MenuConversation  # noqa: F401
 from backend.services.dish_service import import_dishes_from_csv
 from backend.routers.menu import router as menu_router
 
