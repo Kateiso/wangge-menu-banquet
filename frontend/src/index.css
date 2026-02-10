@@ -1,4 +1,335 @@
+/* ========== Global Reset & Base ========== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: linear-gradient(135deg, #f0e6ff 0%, #e8f4fd 30%, #fce7f3 60%, #f0e6ff 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* ========== Custom Scrollbar ========== */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.4);
+}
+
+/* ========== Card Styles ========== */
+.glass-card {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.6) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 4px 24px rgba(139, 92, 246, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+  transition: box-shadow 0.3s ease, transform 0.3s ease !important;
+}
+
+.glass-card:hover {
+  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* ========== Stat Card Styles ========== */
+.stat-card {
+  border-radius: 16px !important;
+  border: none !important;
+  overflow: hidden;
+  position: relative;
+}
+
+.stat-card-budget {
+  background: linear-gradient(135deg, #a78bfa 0%, #818cf8 100%) !important;
+}
+
+.stat-card-margin {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%) !important;
+}
+
+.stat-card-cost {
+  background: linear-gradient(135deg, #f472b6 0%, #ec4899 100%) !important;
+}
+
+.stat-card .ant-statistic-title {
+  color: rgba(255, 255, 255, 0.85) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+.stat-card .ant-statistic-content {
+  color: #fff !important;
+}
+
+.stat-card .ant-statistic-content-value {
+  color: #fff !important;
+  font-weight: 700 !important;
+}
+
+.stat-card .ant-statistic-content-suffix {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.stat-card .ant-statistic-content-prefix {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* ========== Tag Styles ========== */
+.pref-tag {
+  border-radius: 20px !important;
+  padding: 4px 14px !important;
+  font-size: 13px !important;
+  cursor: pointer;
+  transition: all 0.2s ease !important;
+  border: 1px solid #e5e7eb !important;
+  background: #fff !important;
+  color: #6b7280 !important;
+  margin-bottom: 8px !important;
+}
+
+.pref-tag:hover {
+  border-color: #8b5cf6 !important;
+  color: #8b5cf6 !important;
+}
+
+.pref-tag-active {
+  background: linear-gradient(135deg, #8b5cf6, #a78bfa) !important;
+  color: #fff !important;
+  border-color: #8b5cf6 !important;
+}
+
+/* ========== Category Tags ========== */
+.cat-tag {
+  border-radius: 12px !important;
+  font-size: 12px !important;
+  padding: 1px 10px !important;
+  font-weight: 500 !important;
+  border: none !important;
+}
+
+/* ========== Table Refinements ========== */
+.menu-table .ant-table {
+  background: transparent !important;
+}
+
+.menu-table .ant-table-thead > tr > th {
+  background: rgba(139, 92, 246, 0.04) !important;
+  font-weight: 600 !important;
+  color: #4b5563 !important;
+  border-bottom: 2px solid rgba(139, 92, 246, 0.1) !important;
+  font-size: 13px !important;
+}
+
+.menu-table .ant-table-tbody > tr > td {
+  border-bottom: 1px solid rgba(139, 92, 246, 0.06) !important;
+  transition: background 0.2s ease !important;
+}
+
+.menu-table .ant-table-tbody > tr:hover > td {
+  background: rgba(139, 92, 246, 0.03) !important;
+}
+
+.menu-table .ant-table-summary > tr > td {
+  background: rgba(139, 92, 246, 0.04) !important;
+  font-weight: 600 !important;
+}
+
+/* ========== Chat Styles ========== */
+.chat-bubble-user {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: #fff;
+  border-radius: 16px 16px 4px 16px;
+  padding: 10px 16px;
+  max-width: 85%;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.chat-bubble-ai {
+  background: rgba(255, 255, 255, 0.9);
+  color: #374151;
+  border-radius: 16px 16px 16px 4px;
+  padding: 10px 16px;
+  max-width: 85%;
+  font-size: 14px;
+  line-height: 1.6;
+  border: 1px solid rgba(139, 92, 246, 0.1);
+  word-break: break-word;
+}
+
+/* ========== Animations ========== */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+/* ========== Button Enhancements ========== */
+.btn-gradient {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%) !important;
+  border: none !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3) !important;
+  transition: all 0.3s ease !important;
+}
+
+.btn-gradient:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4) !important;
+}
+
+.btn-gradient:active {
+  transform: translateY(0) !important;
+}
+
+.btn-secondary {
+  border-radius: 12px !important;
+  font-weight: 500 !important;
+  border: 1px solid #e5e7eb !important;
+  color: #6b7280 !important;
+  transition: all 0.2s ease !important;
+}
+
+.btn-secondary:hover {
+  border-color: #8b5cf6 !important;
+  color: #8b5cf6 !important;
+}
+
+/* ========== Progress Override ========== */
+.stat-card .ant-progress-bg {
+  background: rgba(255, 255, 255, 0.5) !important;
+}
+
+.stat-card .ant-progress-inner {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* ========== Form Enhancements ========== */
+.modern-form .ant-input,
+.modern-form .ant-input-number,
+.modern-form .ant-picker,
+.modern-form .ant-select-selector {
+  border-radius: 12px !important;
+  border-color: #e5e7eb !important;
+  transition: all 0.2s ease !important;
+}
+
+.modern-form .ant-input:focus,
+.modern-form .ant-input-number-focused,
+.modern-form .ant-picker-focused,
+.modern-form .ant-select-focused .ant-select-selector {
+  border-color: #8b5cf6 !important;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1) !important;
+}
+
+.modern-form .ant-form-item-label > label {
+  font-weight: 500 !important;
+  color: #4b5563 !important;
+}
+
+.modern-form .ant-slider-track {
+  background: linear-gradient(90deg, #8b5cf6, #a78bfa) !important;
+}
+
+.modern-form .ant-slider-handle::after {
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2) !important;
+}
+
+/* ========== Loading Skeleton ========== */
+.loading-card {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.loading-dots {
+  display: inline-flex;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.loading-dots span {
+  width: 8px;
+  height: 8px;
+  background: #8b5cf6;
+  border-radius: 50%;
+  animation: pulse-soft 1.4s infinite;
+}
+
+.loading-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.loading-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* ========== Collapse Override ========== */
+.reasoning-collapse .ant-collapse-header {
+  border-radius: 12px !important;
+  background: rgba(139, 92, 246, 0.04) !important;
+  font-weight: 500 !important;
+  color: #6b7280 !important;
+}
+
+/* ========== Responsive ========== */
+@media (max-width: 768px) {
+  body {
+    background: linear-gradient(180deg, #f0e6ff 0%, #e8f4fd 50%, #fce7f3 100%);
+  }
+
+  .glass-card {
+    border-radius: 16px !important;
+  }
+}
+
+/* ========== Reduced Motion ========== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

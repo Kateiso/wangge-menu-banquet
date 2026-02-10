@@ -11,14 +11,11 @@ import {
   Statistic,
   Row,
   Col,
-  Divider,
   message,
 } from 'antd';
 import {
   DownloadOutlined,
   ReloadOutlined,
-  CheckCircleOutlined,
-  WarningOutlined,
 } from '@ant-design/icons';
 import type { MenuData, MenuItemData } from '../api/menuApi';
 import { downloadExcel } from '../api/menuApi';
@@ -28,12 +25,12 @@ const { Title, Text } = Typography;
 
 const CATEGORY_ORDER = ['凉菜', '热菜', '汤羹', '主食', '甜品', '点心'];
 const CATEGORY_COLORS: Record<string, string> = {
-  凉菜: 'blue',
-  热菜: 'red',
-  汤羹: 'orange',
-  主食: 'green',
-  甜品: 'pink',
-  点心: 'purple',
+  凉菜: '#818cf8',
+  热菜: '#f472b6',
+  汤羹: '#fb923c',
+  主食: '#34d399',
+  甜品: '#f9a8d4',
+  点心: '#a78bfa',
 };
 
 interface Props {
@@ -49,7 +46,6 @@ export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading
   const budgetPercent = Math.round((menu.total_price / menu.budget) * 100);
   const marginOk = Math.abs(menu.margin_rate - menu.target_margin) <= 5;
 
-  // 按类别分组并排序
   const sortedItems = [...menu.items].sort(
     (a, b) =>
       CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category)
@@ -57,19 +53,32 @@ export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading
 
   const columns = [
     {
-      title: '菜名',
+      title: '菜品',
       dataIndex: 'dish_name',
       key: 'dish_name',
       render: (name: string, record: MenuItemData) => (
-        <Space>
-          <Tag color={CATEGORY_COLORS[record.category] || 'default'}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Tag
+            className="cat-tag"
+            color={CATEGORY_COLORS[record.category] || '#d1d5db'}
+          >
             {record.category}
           </Tag>
-          {name}
+          <span style={{ fontWeight: 500, color: '#1f2937' }}>{name}</span>
           {record.price_text.includes('时价') && (
-            <Tag color="warning">时价</Tag>
+            <Tag
+              style={{
+                background: 'rgba(251, 146, 60, 0.1)',
+                color: '#f97316',
+                border: 'none',
+                borderRadius: 8,
+                fontSize: 11,
+              }}
+            >
+              时价
+            </Tag>
           )}
-        </Space>
+        </div>
       ),
     },
     {
@@ -78,6 +87,7 @@ export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading
       key: 'price_text',
       align: 'center' as const,
       width: 120,
+      render: (v: string) => <span style={{ color: '#6b7280' }}>{v}</span>,
     },
     {
       title: '数量',
@@ -85,6 +95,20 @@ export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading
       key: 'quantity',
       align: 'center' as const,
       width: 70,
+      render: (v: number) => (
+        <span
+          style={{
+            background: 'rgba(139, 92, 246, 0.08)',
+            padding: '2px 10px',
+            borderRadius: 8,
+            fontWeight: 600,
+            color: '#7c3aed',
+            fontSize: 13,
+          }}
+        >
+          {v}
+        </span>
+      ),
     },
     {
       title: '小计',
@@ -92,7 +116,11 @@ export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading
       key: 'subtotal',
       align: 'right' as const,
       width: 90,
-      render: (v: number) => `¥${v.toFixed(0)}`,
+      render: (v: number) => (
+        <span style={{ fontWeight: 600, color: '#1f2937' }}>
+          ¥{v.toFixed(0)}
+        </span>
+      ),
     },
     {
       title: '成本',
@@ -101,11 +129,11 @@ export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading
       align: 'right' as const,
       width: 80,
       render: (v: number) => (
-        <Text type="secondary">¥{v.toFixed(0)}</Text>
+        <span style={{ color: '#9ca3af', fontSize: 13 }}>¥{v.toFixed(0)}</span>
       ),
     },
     {
-      title: '毛利率',
+      title: '毛利',
       key: 'item_margin',
       align: 'center' as const,
       width: 80,
@@ -114,10 +142,17 @@ export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading
           record.price > 0
             ? ((record.price - record.cost) / record.price) * 100
             : 0;
+        const color = margin >= 60 ? '#10b981' : margin >= 50 ? '#f59e0b' : '#ef4444';
         return (
-          <Text type={margin >= 50 ? 'success' : 'warning'}>
+          <span
+            style={{
+              color,
+              fontWeight: 600,
+              fontSize: 13,
+            }}
+          >
             {margin.toFixed(0)}%
-          </Text>
+          </span>
         );
       },
     },
@@ -136,70 +171,83 @@ export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading
   };
 
   return (
-    <Row gutter={16}>
-      {/* 左侧：菜单表格 */}
+    <Row gutter={[20, 20]}>
+      {/* 左侧：菜单 */}
       <Col xs={24} lg={16}>
-        <Card>
-          <Title level={4} style={{ textAlign: 'center', marginBottom: 4 }}>
-            旺阁渔村 · 推荐菜单
-          </Title>
-          <Text
-            type="secondary"
-            style={{ display: 'block', textAlign: 'center', marginBottom: 16 }}
-          >
-            {menu.customer_name || '贵宾'} | {menu.party_size}人 | {menu.occasion || '聚餐'}
-            {menu.date ? ` | ${menu.date}` : ''}
-          </Text>
+        <Card className="glass-card" styles={{ body: { padding: '24px' } }}>
+          {/* 标题 */}
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <Title level={4} style={{ marginBottom: 4, color: '#1f2937', fontWeight: 700 }}>
+              推荐菜单
+            </Title>
+            <Space
+              split={<span style={{ color: '#d1d5db' }}>·</span>}
+              size={8}
+            >
+              <Text style={{ color: '#6b7280', fontSize: 13 }}>
+                {menu.customer_name || '贵宾'}
+              </Text>
+              <Text style={{ color: '#6b7280', fontSize: 13 }}>
+                {menu.party_size}人
+              </Text>
+              <Text style={{ color: '#6b7280', fontSize: 13 }}>
+                {menu.occasion || '聚餐'}
+              </Text>
+              {menu.date && (
+                <Text style={{ color: '#6b7280', fontSize: 13 }}>
+                  {menu.date}
+                </Text>
+              )}
+            </Space>
+          </div>
 
-          {/* 汇总指标 */}
-          <Row gutter={16} style={{ marginBottom: 16 }}>
+          {/* 统计卡片 */}
+          <Row gutter={12} style={{ marginBottom: 20 }}>
             <Col span={8}>
-              <Card size="small">
+              <Card size="small" className="stat-card stat-card-budget">
                 <Statistic
                   title="预算使用"
                   value={menu.total_price}
                   suffix={`/ ${menu.budget}`}
                   prefix="¥"
-                  valueStyle={{
-                    fontSize: 18,
-                    color: budgetPercent > 100 ? '#cf1322' : '#3f8600',
-                  }}
+                  valueStyle={{ fontSize: 18 }}
                 />
                 <Progress
                   percent={Math.min(budgetPercent, 100)}
-                  status={budgetPercent > 105 ? 'exception' : 'active'}
+                  showInfo={false}
                   size="small"
+                  style={{ marginTop: 4 }}
                 />
               </Card>
             </Col>
             <Col span={8}>
-              <Card size="small">
+              <Card size="small" className="stat-card stat-card-margin">
                 <Statistic
-                  title="整单毛利率"
+                  title="整单毛利"
                   value={menu.margin_rate}
                   suffix="%"
-                  prefix={marginOk ? <CheckCircleOutlined /> : <WarningOutlined />}
-                  valueStyle={{
-                    fontSize: 18,
-                    color: marginOk ? '#3f8600' : '#faad14',
-                  }}
+                  valueStyle={{ fontSize: 18 }}
                 />
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  目标: {menu.target_margin}%
-                </Text>
+                <div style={{ marginTop: 4 }}>
+                  <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
+                    {marginOk ? '达标' : '偏差'} · 目标 {menu.target_margin}%
+                  </Text>
+                </div>
               </Card>
             </Col>
             <Col span={8}>
-              <Card size="small">
+              <Card size="small" className="stat-card stat-card-cost">
                 <Statistic
-                  title="总成本"
+                  title="成本 / 利润"
                   value={menu.total_cost}
                   prefix="¥"
                   valueStyle={{ fontSize: 18 }}
                 />
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  利润: ¥{(menu.total_price - menu.total_cost).toFixed(0)}
-                </Text>
+                <div style={{ marginTop: 4 }}>
+                  <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
+                    利润 ¥{(menu.total_price - menu.total_cost).toFixed(0)}
+                  </Text>
+                </div>
               </Card>
             </Col>
           </Row>
@@ -208,52 +256,80 @@ export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading
           {menu.reasoning && (
             <Collapse
               ghost
+              className="reasoning-collapse"
               items={[
                 {
                   key: '1',
-                  label: 'AI 配菜思路',
-                  children: <Text>{menu.reasoning}</Text>,
+                  label: (
+                    <span style={{ fontSize: 13 }}>
+                      AI 配菜思路
+                    </span>
+                  ),
+                  children: (
+                    <Text style={{ color: '#6b7280', lineHeight: 1.8, fontSize: 13 }}>
+                      {menu.reasoning}
+                    </Text>
+                  ),
                 },
               ]}
               style={{ marginBottom: 16 }}
             />
           )}
 
-          {/* 菜品列表 */}
-          <Table
-            dataSource={sortedItems}
-            columns={columns}
-            rowKey="dish_id"
-            pagination={false}
-            size="small"
-            summary={() => (
-              <Table.Summary.Row>
-                <Table.Summary.Cell index={0} colSpan={3}>
-                  <Text strong>合计 ({menu.items.length} 道菜)</Text>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={3} align="right">
-                  <Text strong>¥{menu.total_price.toFixed(0)}</Text>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={4} align="right">
-                  <Text type="secondary">¥{menu.total_cost.toFixed(0)}</Text>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={5} align="center">
-                  <Text strong>{menu.margin_rate}%</Text>
-                </Table.Summary.Cell>
-              </Table.Summary.Row>
-            )}
-          />
-
-          <Divider />
+          {/* 菜品表格 */}
+          <div className="menu-table">
+            <Table
+              dataSource={sortedItems}
+              columns={columns}
+              rowKey="dish_id"
+              pagination={false}
+              size="small"
+              summary={() => (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={3}>
+                    <Text strong style={{ color: '#4b5563' }}>
+                      合计 {menu.items.length} 道菜
+                    </Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={3} align="right">
+                    <Text strong style={{ color: '#1f2937', fontSize: 15 }}>
+                      ¥{menu.total_price.toFixed(0)}
+                    </Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={4} align="right">
+                    <Text style={{ color: '#9ca3af' }}>
+                      ¥{menu.total_cost.toFixed(0)}
+                    </Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={5} align="center">
+                    <Text strong style={{ color: '#8b5cf6' }}>
+                      {menu.margin_rate}%
+                    </Text>
+                  </Table.Summary.Cell>
+                </Table.Summary.Row>
+              )}
+            />
+          </div>
 
           {/* 操作按钮 */}
-          <Space style={{ width: '100%', justifyContent: 'center' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: 12,
+              marginTop: 24,
+              paddingTop: 20,
+              borderTop: '1px solid rgba(139, 92, 246, 0.08)',
+            }}
+          >
             <Button
               type="primary"
               icon={<DownloadOutlined />}
               size="large"
               onClick={handleDownload}
               loading={downloading}
+              className="btn-gradient"
+              style={{ minWidth: 140 }}
             >
               下载 Excel
             </Button>
@@ -262,15 +338,17 @@ export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading
               size="large"
               onClick={onRegenerate}
               loading={loading}
+              className="btn-secondary"
+              style={{ minWidth: 120 }}
             >
               重新生成
             </Button>
-          </Space>
+          </div>
         </Card>
       </Col>
 
       {/* 右侧：对话调整 */}
-      <Col xs={24} lg={8} style={{ minHeight: 500 }}>
+      <Col xs={24} lg={8}>
         <MenuAdjustChat menuId={menu.id} onMenuUpdated={onMenuUpdated} />
       </Col>
     </Row>

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Card, Input, Button, Typography, Space, Spin, message } from 'antd';
+import { Card, Input, Button, Typography, Spin, message } from 'antd';
 import { SendOutlined, CheckOutlined } from '@ant-design/icons';
 import { adjustMenu } from '../api/menuApi';
 import type { MenuData, AdjustAction } from '../api/menuApi';
@@ -64,7 +64,6 @@ export default function MenuAdjustChat({ menuId, onMenuUpdated }: Props) {
       const res = await adjustMenu(menuId, '', 'confirm', conversationId);
       if (res.type === 'updated' && res.menu) {
         onMenuUpdated(res.menu);
-        // 标记已确认
         setMessages(prev =>
           prev.map((m, i) => (i === msgIndex ? { ...m, confirmed: true } : m))
         );
@@ -82,86 +81,171 @@ export default function MenuAdjustChat({ menuId, onMenuUpdated }: Props) {
 
   return (
     <Card
-      title="调整菜单"
-      size="small"
+      className="glass-card"
+      styles={{
+        header: {
+          borderBottom: '1px solid rgba(139, 92, 246, 0.08)',
+          padding: '14px 20px',
+          minHeight: 'auto',
+        },
+        body: {
+          display: 'flex',
+          flexDirection: 'column',
+          padding: 0,
+          height: 'calc(100% - 52px)',
+          overflow: 'hidden',
+        },
+      }}
+      title={
+        <span style={{ fontWeight: 600, color: '#1f2937', fontSize: 15 }}>
+          调整菜单
+        </span>
+      }
       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-      styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: '8px 12px', overflow: 'hidden' } }}
     >
       {/* 消息列表 */}
       <div
         ref={listRef}
-        style={{ flex: 1, overflowY: 'auto', marginBottom: 8 }}
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '16px 16px 8px',
+        }}
       >
         {messages.length === 0 && (
-          <Text type="secondary" style={{ display: 'block', textAlign: 'center', padding: '20px 0' }}>
-            输入需求调整菜单，如"换掉凉菜"、"加个海鲜"
-          </Text>
-        )}
-        {messages.map((msg, i) => (
           <div
-            key={i}
             style={{
-              display: 'flex',
-              justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
-              marginBottom: 8,
+              textAlign: 'center',
+              padding: '40px 16px',
             }}
           >
             <div
               style={{
-                maxWidth: '85%',
-                padding: '8px 12px',
-                borderRadius: 8,
-                background: msg.role === 'user' ? '#1677ff' : '#f5f5f5',
-                color: msg.role === 'user' ? '#fff' : '#333',
-                fontSize: 13,
+                width: 44,
+                height: 44,
+                borderRadius: 14,
+                background: 'rgba(139, 92, 246, 0.08)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 12,
               }}
             >
+              <span style={{ fontSize: 18, color: '#8b5cf6' }}>AI</span>
+            </div>
+            <Text
+              style={{
+                display: 'block',
+                color: '#9ca3af',
+                fontSize: 13,
+                lineHeight: 1.6,
+              }}
+            >
+              输入需求调整菜单
+              <br />
+              如"换掉凉菜"、"加个海鲜"
+            </Text>
+          </div>
+        )}
+
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            className="animate-fade-in"
+            style={{
+              display: 'flex',
+              justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              marginBottom: 12,
+            }}
+          >
+            <div className={msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}>
               <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
               {msg.type === 'suggest' && !msg.confirmed && msg.conversationId && (
-                <div style={{ marginTop: 6, textAlign: 'right' }}>
+                <div style={{ marginTop: 8, textAlign: 'right' }}>
                   <Button
                     type="primary"
                     size="small"
                     icon={<CheckOutlined />}
                     loading={confirming === msg.conversationId}
                     onClick={() => handleConfirm(msg.conversationId!, i)}
+                    className="btn-gradient"
+                    style={{
+                      borderRadius: 8,
+                      fontSize: 12,
+                      height: 28,
+                    }}
                   >
                     确认调整
                   </Button>
                 </div>
               )}
               {msg.confirmed && (
-                <div style={{ marginTop: 4 }}>
-                  <Text type="success" style={{ fontSize: 12 }}>已确认</Text>
+                <div style={{ marginTop: 6 }}>
+                  <span style={{ fontSize: 12, color: '#10b981', fontWeight: 500 }}>
+                    已确认
+                  </span>
                 </div>
+              )}
+              {msg.type === 'updated' && (
+                <span
+                  style={{
+                    display: 'inline-block',
+                    marginTop: 4,
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    color: '#10b981',
+                    padding: '2px 8px',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 500,
+                  }}
+                >
+                  已生效
+                </span>
               )}
             </div>
           </div>
         ))}
+
         {loading && (
-          <div style={{ textAlign: 'center', padding: 8 }}>
-            <Space><Spin size="small" /><Text type="secondary">AI 思考中...</Text></Space>
+          <div className="animate-fade-in" style={{ textAlign: 'center', padding: '8px 0' }}>
+            <Spin size="small" />
+            <Text style={{ color: '#9ca3af', fontSize: 12, marginLeft: 8 }}>
+              AI 思考中...
+            </Text>
           </div>
         )}
       </div>
 
       {/* 输入框 */}
-      <Input
-        placeholder="输入调整需求..."
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        onPressEnter={handleSend}
-        disabled={loading}
-        suffix={
-          <Button
-            type="text"
-            size="small"
-            icon={<SendOutlined />}
-            onClick={handleSend}
-            disabled={!input.trim() || loading}
-          />
-        }
-      />
+      <div
+        style={{
+          padding: '12px 16px',
+          borderTop: '1px solid rgba(139, 92, 246, 0.06)',
+        }}
+      >
+        <Input
+          placeholder="输入调整需求..."
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onPressEnter={handleSend}
+          disabled={loading}
+          style={{
+            borderRadius: 12,
+            border: '1px solid #e5e7eb',
+            fontSize: 14,
+          }}
+          suffix={
+            <Button
+              type="text"
+              size="small"
+              icon={<SendOutlined style={{ color: input.trim() ? '#8b5cf6' : '#d1d5db' }} />}
+              onClick={handleSend}
+              disabled={!input.trim() || loading}
+              style={{ cursor: 'pointer' }}
+            />
+          }
+        />
+      </div>
     </Card>
   );
 }
