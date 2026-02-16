@@ -1,11 +1,18 @@
 import logging
+import threading
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from sqlmodel import SQLModel, Session, create_engine
-from backend.config import DATABASE_URL, APP_PASSWORD
+from backend.config import (
+    DATABASE_URL,
+    APP_PASSWORD,
+    ALLOWED_ORIGINS,
+    RATE_LIMIT_PER_MINUTE,
+)
 from backend.models.dish import Dish  # noqa: F401 - needed for table creation
 from backend.models.menu import Menu, MenuItem  # noqa: F401
 from backend.models.conversation import MenuConversation  # noqa: F401
@@ -36,11 +43,21 @@ app = FastAPI(title="旺阁渔村 AI 点菜系统", lifespan=lifespan)
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_rate_lock = threading.Lock()
+_request_buckets: dict[str, list[float]] = {}
+
+
+def _client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 # 密码认证中间件
@@ -61,6 +78,17 @@ async def auth_middleware(request: Request, call_next):
     ):
         return await call_next(request)
 
+    # 基础限流：按 IP 对 API 请求做每分钟限制
+    now = time.time()
+    ip = _client_ip(request)
+    with _rate_lock:
+        bucket = _request_buckets.setdefault(ip, [])
+        window_start = now - 60
+        bucket[:] = [ts for ts in bucket if ts >= window_start]
+        if len(bucket) >= RATE_LIMIT_PER_MINUTE:
+            return JSONResponse(status_code=429, content={"detail": "请求过于频繁，请稍后再试"})
+        bucket.append(now)
+
     # 检查 Authorization header 或 URL token 参数（用于 Excel 下载等）
     auth = request.headers.get("Authorization", "")
     url_token = request.query_params.get("token", "")
@@ -78,6 +106,11 @@ async def auth(request: Request):
     if password == APP_PASSWORD:
         return {"success": True, "token": APP_PASSWORD}
     raise HTTPException(status_code=401, detail="密码错误")
+
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok"}
 
 
 # API 路由
