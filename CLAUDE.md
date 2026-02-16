@@ -95,3 +95,37 @@ DEFAULT_MARGIN=55          # Default target margin %
 
 - **master**: stable production
 - Auto git commit on changes (per user preference)
+
+## Release Trigger
+
+- 只有当用户在当前对话中明确回复“OK”（或“可以发布”）时，才允许执行生产发布动作。
+- 在收到“OK”前，默认只完成开发、构建、测试与预览，不执行发布到生产环境。
+
+## Handoff (Concise)
+
+- 项目目录固定：`/Users/kateiso_cao/Desktop/旺阁渔村_点菜系统开发`（不迁移）。
+- 并行开发使用 `wt` / `git worktree`：
+  - `wt switch --create <branch>`
+  - `wt switch <branch>`
+  - `git worktree list`
+- 当前目标方向：可上线、国内访问速度可接受（不是必须备案级别）。
+- 生产动作前必须再次拿到用户明确“OK / 可以发布”。
+
+## Latest Online Snapshot (2026-02-16)
+
+- 已上线地址：`https://wangge-menu-sbvdirxv5q-df.a.run.app`（Cloud Run, `asia-east2`）。
+- 线上服务：`wangge-menu`（项目 `kateiso-core`）。
+- 当前线上功能：用户名+密码登录、菜品管理、AI 点菜、菜单调整、Excel 下载。
+- 认证已升级为 JWT：
+  - 登录：`POST /api/auth/login`
+  - 当前用户：`GET /api/auth/me`
+  - 菜品管理：`/api/dishes`（需登录）
+- 密钥策略：
+  - `DEEPSEEK_API_KEY` -> Secret Manager: `deepseek-api-key`
+  - `JWT_SECRET_KEY` -> Secret Manager: `jwt-secret-key`
+- 安全基线：IP 限流（默认 30/min）、`/api/health`、Uptime Check（`wangge-menu-health`）、Alert Policy（`wangge-menu-health-alert`）。
+- 发布命令（当前可用）：
+  - `gcloud run deploy wangge-menu --source . --region asia-east2 --project kateiso-core --allow-unauthenticated`
+- 代码基线提交（worktree `onweb`）：
+  - `56b4f1e`：恢复账号登录+菜品管理到线上版本
+  - `a76060b`：部署修复与基础安全能力
