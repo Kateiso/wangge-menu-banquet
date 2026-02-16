@@ -11,16 +11,63 @@ function headers(): Record<string, string> {
   };
 }
 
-export async function login(password: string): Promise<boolean> {
-  const res = await fetch(`${BASE}/api/auth`, {
+export interface User {
+  username: string;
+  role: string;
+  full_name?: string;
+}
+
+export async function login(username: string, pass: string): Promise<User> {
+  const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ username, password: pass }),
   });
-  if (!res.ok) return false;
+  if (!res.ok) throw new Error("用户名或密码错误");
+
   const data = await res.json();
-  localStorage.setItem('wg_token', data.token);
-  return true;
+  localStorage.setItem('wg_token', data.access_token);
+  return { username: data.username, role: data.role, full_name: data.full_name };
+}
+
+export async function getMe(): Promise<User> {
+  const token = getToken();
+  if (!token) throw new Error("not logged in");
+
+  const res = await fetch(`${BASE}/api/auth/me`, { headers: headers() });
+  if (!res.ok) throw new Error("未授权");
+  return res.json();
+}
+
+export interface Dish {
+  id: number;
+  name: string;
+  price_text: string;
+  price: number;
+  cost: number;
+  category: string;
+  is_active: boolean;
+  tags?: string;
+}
+
+export async function getDishes(params?: { category?: string; active_only?: boolean }): Promise<Dish[]> {
+  const url = new URL(`${window.location.origin}${BASE}/api/dishes`);
+  if (params?.category) url.searchParams.set("category", params.category);
+  if (params?.active_only) url.searchParams.set("active_only", "true");
+
+  const res = await fetch(url.toString(), { headers: headers() });
+  if (!res.ok) throw new Error("获取菜品失败");
+  return res.json();
+}
+
+export async function updateDish(id: number, updates: Partial<Dish>): Promise<Dish> {
+  const res = await fetch(`${BASE}/api/dishes/${id}`, {
+    method: 'PUT',
+    headers: headers(),
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error("更新菜品失败");
+  return res.json();
 }
 
 export interface MenuRequest {
@@ -80,7 +127,9 @@ export async function generateMenu(req: MenuRequest): Promise<MenuData> {
 }
 
 export function getExcelUrl(menuId: string): string {
-  return `${BASE}/api/menu/${menuId}/excel?token=${getToken()}`;
+  // Direct link download might fail with Bearer auth unless we implement query param auth again or use blob download
+  // For now rely on checkToken or just let downloadExcel handle it
+  return `${BASE}/api/menu/${menuId}/excel`;
 }
 
 export interface AdjustAction {
