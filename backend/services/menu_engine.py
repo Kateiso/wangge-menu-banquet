@@ -203,6 +203,9 @@ def build_banquet_prompt(
     feedback_note: str = '',
 ) -> str:
     dish_count = request.party_size + 3
+    target_cost = request.budget * (1 - request.target_margin / 100)
+    cost_low = int(target_cost * 0.90)
+    cost_high = int(target_cost * 1.10)
     signature_constraint = _build_signature_constraint(request, priority_dishes)
     serving_rules = _build_serving_rules(
         request, split_rule_dishes, per_unit_dishes_without_split
@@ -213,12 +216,19 @@ def build_banquet_prompt(
 ## 配菜规则 (宴会模式 - 内容优先)
 1. 菜品总数: 约 {dish_count} 道菜（人数{request.party_size}人）
 2. 结构: 凉菜2-4道 / 热菜≥4道 / 汤羹1-2道 / 主食1-2道 / 甜品或点心1-2道
-3. 重点: **不要考虑菜品单价**，优先考虑菜品的搭配、档次、口味多样性和视觉效果。
+3. 重点: 优先考虑菜品的搭配、档次、口味多样性和视觉效果。
 4. 质量: 确保菜单包含招牌菜，且食材涵盖海鲜、肉类、时蔬等。
 5. 场合匹配: 根据客户提供的场合（如：婚宴、商务、生日等）选择最合适的菜品。
+6. 成本参考【重要】:
+   - 每道菜都标注了成本，请选菜后计算总成本 = sum(成本×数量)
+   - 目标总成本范围: {cost_low}~{cost_high} 元
+   - 若总成本过高，替换部分高成本菜为同类中等成本菜
+   - 若总成本过低，升级部分菜品为更高档食材
 
 ## 客户需求
 - 人数: {request.party_size}人
+- 宴会总价: {request.budget}元（系统将自动按此总价分配单价）
+- 目标毛利: {request.target_margin}%（对应目标成本 {int(target_cost)} 元）
 - 场合: {request.occasion or '宴会聚餐'}
 - 偏好: {request.preferences or '无特殊要求'}
 {signature_constraint}
@@ -234,6 +244,7 @@ def build_banquet_prompt(
   "menu": [
     {{"dish_id": 24, "quantity": 6, "reason": "宴会必备，高档大气"}}
   ],
+  "cost_estimate": {int(target_cost)},
   "reasoning": "本菜单专为{request.occasion or '宴会'}设计，突出了..."
 }}
 ```
@@ -241,7 +252,9 @@ def build_banquet_prompt(
 注意：
 - dish_id 必须是上面菜品列表中存在的 # 号后数字
 - quantity 是点菜数量
+- cost_estimate 是你估算的菜品总成本（应在 {cost_low}~{cost_high} 范围内）
 - reasoning 是整体配菜思路说明
+- 选完菜后请自行加总验算成本，如果不在范围内请调整菜品
 {feedback_note}"""
 
 
@@ -276,6 +289,7 @@ def validate_and_build_menu(
 
     menu = Menu(
         customer_name=request.customer_name,
+        mode='retail',
         party_size=request.party_size,
         budget=request.budget,
         target_margin=request.target_margin,
@@ -309,6 +323,7 @@ def validate_and_build_menu(
             dish_name=dish.name,
             price_text=dish.price_text,
             price=dish.price,
+            min_price=dish.min_price,
             cost=dish.cost,
             quantity=quantity,
             subtotal=subtotal,
@@ -341,6 +356,44 @@ def validate_and_build_menu(
     return menu, items
 
 
+def _apply_banquet_pricing(items: list[MenuItem], budget: float) -> float:
+    """反向定价：按比例分配加价，强制 min_price 下限，修正舍入余额。
+
+    返回实际 total_price（应极接近或等于 budget）。
+    """
+    total_cost = sum(item.cost_total for item in items)
+    if total_cost == 0:
+        return 0.0
+
+    total_markup = budget - total_cost
+
+    # 阶段 1：按比例分配加价
+    for item in items:
+        item_markup = total_markup * (item.cost_total / total_cost)
+        raw_subtotal = item.cost_total + item_markup
+        # 阶段 2：强制 min_price 下限
+        min_subtotal = round(item.min_price * item.quantity, 2)
+        item.subtotal = round(max(raw_subtotal, min_subtotal), 2)
+        item.price = round(item.subtotal / item.quantity, 2)
+        # 重新精确计算 subtotal 避免 price*qty 的舍入偏差
+        item.subtotal = round(item.price * item.quantity, 2)
+
+    # 阶段 3：修正舍入余额 — 差额吸收到最大可调项
+    current_sum = sum(item.subtotal for item in items)
+    remainder = round(budget - current_sum, 2)
+    if remainder != 0 and items:
+        # 找最大 subtotal 且有调整空间的项
+        adjustable = [
+            it for it in items
+            if it.subtotal + remainder >= round(it.min_price * it.quantity, 2)
+        ]
+        target = max(adjustable or items, key=lambda it: it.subtotal)
+        target.subtotal = round(target.subtotal + remainder, 2)
+        target.price = round(target.subtotal / target.quantity, 2)
+
+    return sum(item.subtotal for item in items)
+
+
 def validate_and_build_banquet_menu(
     session: Session, request: MenuGenerateRequest, llm_result: dict
 ) -> tuple[Menu, list[MenuItem]]:
@@ -354,6 +407,7 @@ def validate_and_build_banquet_menu(
 
     menu = Menu(
         customer_name=request.customer_name,
+        mode='banquet',
         party_size=request.party_size,
         budget=request.budget,
         target_margin=request.target_margin,
@@ -377,12 +431,13 @@ def validate_and_build_banquet_menu(
         dish = all_dishes[dish_id]
         cost_total = round(dish.cost * quantity, 2)
         total_cost += cost_total
-        
+
         item = MenuItem(
             menu_id=menu.id,
             dish_id=dish.id,
             dish_name=dish.name,
             price_text=dish.price_text,
+            min_price=dish.min_price,
             cost=dish.cost,
             quantity=quantity,
             cost_total=cost_total,
@@ -397,18 +452,17 @@ def validate_and_build_banquet_menu(
     current_margin = (request.budget - total_cost) / request.budget * 100
     if current_margin < request.target_margin - 5:
         logger.warning(f'Banquet margin too low: {current_margin:.1f}% < {request.target_margin}%')
-        return menu, [] 
+        return menu, []
 
-    total_markup = request.budget - total_cost
+    # 反向定价（含 min_price 保护 + 舍入修正）
+    actual_total = _apply_banquet_pricing(items, request.budget)
+
     for item in items:
-        item_markup = total_markup * (item.cost_total / total_cost)
-        item.subtotal = round(item.cost_total + item_markup, 2)
-        item.price = round(item.subtotal / item.quantity, 2)
         session.add(item)
 
-    menu.total_price = request.budget
+    menu.total_price = round(actual_total, 2)
     menu.total_cost = round(total_cost, 2)
-    menu.margin_rate = round(current_margin, 1)
+    menu.margin_rate = round((actual_total - total_cost) / actual_total * 100, 1) if actual_total > 0 else 0
     summary = (
         f"系统核算：按预算定价 {menu.total_price:.0f} 元，"
         f"总成本 {menu.total_cost:.0f} 元，毛利率 {menu.margin_rate:.1f}% 。"
@@ -495,6 +549,20 @@ def generate_menu(session: Session, request: MenuGenerateRequest) -> tuple[Menu,
                     session.delete(menu)
                     session.commit()
                     raise ValueError('；'.join(retry_reasons))
+            else:
+                # 宴会模式：检查成本是否偏离过大
+                target_cost = request.budget * (1 - request.target_margin / 100)
+                cost_ratio = menu.total_cost / target_cost if target_cost > 0 else 1
+                if (cost_ratio < 0.85 or cost_ratio > 1.15) and attempt < 2:
+                    note = f'总成本 {menu.total_cost:.0f} 元，目标 {target_cost:.0f} 元，偏差过大。'
+                    for item in items: session.delete(item)
+                    session.delete(menu)
+                    session.commit()
+                    prompt = build_banquet_prompt(
+                        request, catalog, priority_dishes, split_rule_dishes, per_unit_dishes_without_split,
+                        feedback_note=f'\n## 上一次结果需修正\n- {note}\n- 请调整菜品使总成本更接近目标。',
+                    )
+                    continue
 
             return menu, items
         except Exception as e:
