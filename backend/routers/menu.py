@@ -24,6 +24,7 @@ def _build_menu_response(menu: Menu, items: list[MenuItem], date: str = "") -> M
     return MenuResponse(
         id=menu.id,
         customer_name=menu.customer_name,
+        mode=getattr(menu, 'mode', 'retail'),
         party_size=menu.party_size,
         budget=menu.budget,
         target_margin=menu.target_margin,
@@ -39,6 +40,7 @@ def _build_menu_response(menu: Menu, items: list[MenuItem], date: str = "") -> M
                 dish_name=item.dish_name,
                 price_text=item.price_text,
                 price=item.price,
+                min_price=getattr(item, 'min_price', 0.0),
                 cost=item.cost,
                 quantity=item.quantity,
                 subtotal=item.subtotal,

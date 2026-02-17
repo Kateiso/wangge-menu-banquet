@@ -14,6 +14,7 @@ class DishUpdate(BaseModel):
     price_text: Optional[str] = None
     price: Optional[float] = None
     cost: Optional[float] = None  # Admin only
+    min_price: Optional[float] = None  # Admin only
     category: Optional[str] = None
     is_active: Optional[bool] = None
     is_signature: Optional[bool] = None
@@ -48,7 +49,7 @@ def update_dish(
         raise HTTPException(status_code=404, detail="菜品不存在")
         
     # Permission checks
-    restricted_fields = ["cost", "price", "price_text"]
+    restricted_fields = ["cost", "price", "price_text", "min_price"]
     update_data = updates.model_dump(exclude_unset=True)
     
     for field in restricted_fields:

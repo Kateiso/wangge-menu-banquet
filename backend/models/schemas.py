@@ -17,6 +17,7 @@ class MenuItemResponse(BaseModel):
     dish_name: str
     price_text: str = ''
     price: float = 0.0
+    min_price: float = 0.0
     cost: float = 0.0
     quantity: int = 1
     subtotal: float = 0.0
@@ -27,6 +28,7 @@ class MenuItemResponse(BaseModel):
 class MenuResponse(BaseModel):
     id: Optional[str]
     customer_name: str
+    mode: str = 'retail'
     party_size: int
     budget: float
     target_margin: float
