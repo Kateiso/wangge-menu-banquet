@@ -47,7 +47,9 @@ def generate_excel(menu: Menu, items: list[MenuItem]) -> io.BytesIO:
     # 信息行
     row = 2
     date_str = datetime.now().strftime("%Y-%m-%d")
-    info = f"客户: {menu.customer_name or '贵宾'}  |  人数: {menu.party_size}位  |  日期: {date_str}  |  预算: {int(menu.budget)}元  |  场合: {menu.occasion or '聚餐'}"
+    is_banquet = getattr(menu, 'mode', 'retail') == 'banquet'
+    budget_label = f"宴会总价: {int(menu.budget)}元" if is_banquet else f"预算: {int(menu.budget)}元"
+    info = f"客户: {menu.customer_name or '贵宾'}  |  人数: {menu.party_size}位  |  日期: {date_str}  |  {budget_label}  |  场合: {menu.occasion or '聚餐'}"
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
     cell = ws.cell(row=row, column=1, value=info)
     cell.font = Font(name="微软雅黑", size=10)
