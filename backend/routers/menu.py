@@ -10,8 +10,14 @@ from backend.models.schemas import (
 from backend.services.menu_engine import generate_menu
 from backend.services.excel_generator import generate_excel
 from backend.services.adjustment_engine import analyze_adjustment_intent, execute_adjustment
+from backend.database import get_session
+from backend.auth_utils import get_current_user
 
-router = APIRouter(prefix="/api/menu", tags=["menu"])
+router = APIRouter(
+    prefix="/api/menu", 
+    tags=["menu"],
+    dependencies=[Depends(get_current_user)]
+)
 
 
 def _build_menu_response(menu: Menu, items: list[MenuItem], date: str = "") -> MenuResponse:
@@ -43,14 +49,6 @@ def _build_menu_response(menu: Menu, items: list[MenuItem], date: str = "") -> M
             for item in items
         ],
     )
-
-
-def get_session():
-    from backend.main import engine
-    from sqlmodel import Session
-    with Session(engine) as session:
-        yield session
-
 
 @router.post("/generate", response_model=MenuResponse)
 def api_generate_menu(
