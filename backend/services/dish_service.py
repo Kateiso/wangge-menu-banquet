@@ -6,10 +6,15 @@ from backend.models.dish import Dish
 from backend.config import CSV_PATH
 
 
-def parse_price(price_str: str) -> tuple[str, float, bool]:
-    """解析价格字符串 → (price_text, price, is_market_price)"""
+def _extract_serving_unit(price_text: str) -> str:
+    match = re.search(r"元/([^\s/]+)", price_text)
+    return match.group(1).strip() if match else ""
+
+
+def parse_price(price_str: str) -> tuple[str, float, bool, str]:
+    """解析价格字符串 → (price_text, price, is_market_price, serving_unit)"""
     if not price_str or price_str.strip() == "":
-        return "", 0.0, False
+        return "", 0.0, False, ""
 
     price_str = price_str.strip()
 
@@ -18,19 +23,20 @@ def parse_price(price_str: str) -> tuple[str, float, bool]:
         ref_match = re.search(r"参考(\d+\.?\d*)", price_str)
         ref_price = float(ref_match.group(1)) if ref_match else 0.0
         price_text = price_str if "参考" in price_str else f"时价(参考0元)/例"
-        return price_text, ref_price, True
+        return price_text, ref_price, True, _extract_serving_unit(price_text)
 
     # 标准价格: 99元/例、53元/只、13.9元/件
     match = re.match(r"^(\d+\.?\d*)元/(.+)$", price_str)
     if match:
-        return price_str, float(match.group(1)), False
+        serving_unit = match.group(2).strip()
+        return price_str, float(match.group(1)), False, serving_unit
 
     # 尝试直接提取数字
     num_match = re.search(r"(\d+\.?\d*)", price_str)
     if num_match:
-        return price_str, float(num_match.group(1)), False
+        return price_str, float(num_match.group(1)), False, _extract_serving_unit(price_str)
 
-    return price_str, 0.0, False
+    return price_str, 0.0, False, _extract_serving_unit(price_str)
 
 
 def infer_category(name: str, cooking_method: str, scene: str) -> str:
@@ -103,7 +109,7 @@ def import_dishes_from_csv(session: Session) -> int:
             if not price_raw:
                 continue
 
-            price_text, price, is_market_price = parse_price(price_raw)
+            price_text, price, is_market_price, serving_unit = parse_price(price_raw)
 
             cooking_method = row.get("烹饪方式", "").strip()
             scene = row.get("场景推荐", "").strip()
@@ -135,6 +141,8 @@ def import_dishes_from_csv(session: Session) -> int:
                 category=category,
                 tags=tags,
                 is_active=True,
+                serving_unit=serving_unit,
+                serving_split=0,
             )
             session.add(dish)
             count += 1

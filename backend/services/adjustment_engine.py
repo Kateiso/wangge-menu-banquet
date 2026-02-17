@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 from backend.models.dish import Dish
 from backend.models.menu import Menu, MenuItem
 from backend.models.conversation import MenuConversation
-from backend.models.schemas import AdjustResponse, AdjustmentAction, MenuResponse, MenuItemResponse
+from backend.models.schemas import AdjustResponse, AdjustmentAction
 from backend.services.menu_engine import get_client, build_dish_catalog, CATEGORY_ORDER
 
 logger = logging.getLogger(__name__)
@@ -146,6 +146,10 @@ def execute_adjustment(session: Session, menu_id: str, conversation_id: int) -> 
     for add in add_items:
         dish_id = add.get("dish_id")
         quantity = add.get("quantity", 1)
+        try:
+            quantity = max(1, int(quantity))
+        except (TypeError, ValueError):
+            quantity = 1
         reason = add.get("reason", "")
 
         if dish_id not in all_dishes:
