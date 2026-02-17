@@ -44,6 +44,7 @@ export interface Dish {
   name: string;
   price_text: string;
   price: number;
+  min_price: number;
   cost: number;
   category: string;
   is_active: boolean;
@@ -82,6 +83,7 @@ export interface MenuRequest {
   occasion: string;
   preferences: string;
   date: string;
+  mode: 'retail' | 'banquet';
 }
 
 export interface MenuItemData {
@@ -89,6 +91,7 @@ export interface MenuItemData {
   dish_name: string;
   price_text: string;
   price: number;
+  min_price: number;
   cost: number;
   quantity: number;
   subtotal: number;
@@ -100,6 +103,7 @@ export interface MenuItemData {
 export interface MenuData {
   id: string;
   customer_name: string;
+  mode: 'retail' | 'banquet';
   party_size: number;
   budget: number;
   target_margin: number;

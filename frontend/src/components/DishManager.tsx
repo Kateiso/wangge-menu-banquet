@@ -64,6 +64,7 @@ const DishManager = ({ user }: DishManagerProps) => {
         form.setFieldsValue({
             price: dish.price,
             cost: dish.cost,
+            min_price: dish.min_price,
             price_text: dish.price_text,
             serving_unit: dish.serving_unit || "",
             serving_split: dish.serving_split || 0,
@@ -130,6 +131,14 @@ const DishManager = ({ user }: DishManagerProps) => {
             width: 100,
             render: (cost: number) => (
                 isAdmin ? <span style={{ color: '#faad14', fontWeight: 'bold' }}>¥{cost}</span> : '***'
+            )
+        },
+        {
+            title: '底价(¥)',
+            dataIndex: 'min_price',
+            width: 100,
+            render: (min_price: number) => (
+                isAdmin ? <span style={{ color: '#fa8c16' }}>¥{min_price}</span> : '***'
             )
         },
         {
@@ -229,6 +238,9 @@ const DishManager = ({ user }: DishManagerProps) => {
                     </Form.Item>
                     <Form.Item name="cost" label="成本 (¥)" rules={[{ required: true }]}>
                         <InputNumber style={{ width: '100%' }} precision={2} />
+                    </Form.Item>
+                    <Form.Item name="min_price" label="底价 (¥) — 宴会模式定价下限">
+                        <InputNumber style={{ width: '100%' }} precision={2} min={0} />
                     </Form.Item>
                     <Form.Item name="price_text" label="价格描述 (如: 98元/例)">
                         <Input />
