@@ -10,6 +10,7 @@ def generate_uuid() -> str:
 class Menu(SQLModel, table=True):
     id: str = Field(default_factory=generate_uuid, primary_key=True)
     customer_name: str = ''
+    mode: str = 'retail'
     party_size: int = 0
     budget: float = 0.0
     target_margin: float = 0.0
@@ -29,6 +30,7 @@ class MenuItem(SQLModel, table=True):
     dish_name: str
     price_text: str = ''
     price: float = 0.0
+    min_price: float = 0.0
     cost: float = 0.0
     quantity: int = 1
     subtotal: float = 0.0

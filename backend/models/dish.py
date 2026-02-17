@@ -8,6 +8,7 @@ class Dish(SQLModel, table=True):
     price: float = 0.0
     is_market_price: bool = False
     cost: float = 0.0
+    min_price: float = 0.0
     category: str = ''
     tags: str = ''
     is_active: bool = True

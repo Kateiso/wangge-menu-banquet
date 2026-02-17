@@ -24,6 +24,22 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # 启动时创建表并导入 CSV + 初始化用户
     SQLModel.metadata.create_all(engine)
+
+    # 自动迁移：为已有数据库添加宴会模式所需字段
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    with engine.connect() as conn:
+        if 'min_price' not in {c['name'] for c in inspector.get_columns('dish')}:
+            conn.execute(text("ALTER TABLE dish ADD COLUMN min_price REAL DEFAULT 0.0"))
+            conn.execute(text("UPDATE dish SET min_price = ROUND(cost * 1.3, 2) WHERE min_price = 0"))
+            conn.commit()
+        if 'mode' not in {c['name'] for c in inspector.get_columns('menu')}:
+            conn.execute(text("ALTER TABLE menu ADD COLUMN mode TEXT DEFAULT 'retail'"))
+            conn.commit()
+        if 'min_price' not in {c['name'] for c in inspector.get_columns('menuitem')}:
+            conn.execute(text("ALTER TABLE menuitem ADD COLUMN min_price REAL DEFAULT 0.0"))
+            conn.commit()
+
     with Session(engine) as session:
         # 导入菜品
         count = import_dishes_from_csv(session)

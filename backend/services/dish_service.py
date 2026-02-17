@@ -131,6 +131,7 @@ def import_dishes_from_csv(session: Session) -> int:
             name_hash = int(hashlib.md5(name.encode()).hexdigest()[:8], 16)
             jitter = ((name_hash % 160) - 80) / 1000  # -0.08 ~ +0.08
             cost = round(price * max(0.15, min(0.55, ratio + jitter)), 2)
+            min_price = round(cost * 1.3, 2)
 
             dish = Dish(
                 name=name,
@@ -138,6 +139,7 @@ def import_dishes_from_csv(session: Session) -> int:
                 price=price,
                 is_market_price=is_market_price,
                 cost=cost,
+                min_price=min_price,
                 category=category,
                 tags=tags,
                 is_active=True,
