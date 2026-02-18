@@ -1,63 +1,60 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import List, Optional
 
 
 class MenuGenerateRequest(BaseModel):
-    customer_name: str = ""
-    party_size: int
-    budget: float
-    target_margin: float = 55.0
-    occasion: str = ""
-    preferences: str = ""  # 偏好备注
-    date: str = ""  # 日期
-
+    customer_name: str = ''
+    party_size: int = 10
+    budget: float = 2000.0
+    target_margin: float = 60.0
+    occasion: Optional[str] = None
+    preferences: Optional[str] = None
+    date: str = ''
+    mode: str = 'retail'
 
 class MenuItemResponse(BaseModel):
     dish_id: int
     dish_name: str
-    price_text: str
-    price: float
-    cost: float
-    quantity: int
-    subtotal: float
-    cost_total: float
-    category: str
-    reason: str = ""
-
+    price_text: str = ''
+    price: float = 0.0
+    min_price: float = 0.0
+    cost: float = 0.0
+    quantity: int = 1
+    subtotal: float = 0.0
+    cost_total: float = 0.0
+    category: str = ''
+    reason: Optional[str] = None
 
 class MenuResponse(BaseModel):
-    id: str
+    id: Optional[str]
     customer_name: str
+    mode: str = 'retail'
     party_size: int
     budget: float
     target_margin: float
-    occasion: str
+    occasion: Optional[str]
     total_price: float
     total_cost: float
     margin_rate: float
-    reasoning: str
-    items: list[MenuItemResponse]
-    date: str = ""
+    reasoning: Optional[str]
+    date: str = ''
+    items: List[MenuItemResponse]
 
-
-class AuthRequest(BaseModel):
-    password: str
+class AdjustRequest(BaseModel):
+    action: str = 'chat'
+    message: str = ''
+    conversation_id: Optional[int] = None
 
 
 class AdjustmentAction(BaseModel):
-    remove: list[int] = []
-    add: list[dict] = []  # [{dish_id, quantity, reason}]
-
-
-class AdjustRequest(BaseModel):
-    message: str = ""
-    action: str = "chat"  # "chat" | "confirm"
-    conversation_id: int | None = None
+    remove: List[int] = []
+    add: List[dict] = []
 
 
 class AdjustResponse(BaseModel):
-    type: str  # "ask" | "suggest" | "updated"
+    type: str
     message: str
-    action: AdjustmentAction | None = None
-    conversation_id: int | None = None
+    action: Optional[AdjustmentAction] = None
     menu: Optional[MenuResponse] = None
+    options: Optional[List[str]] = None
+    conversation_id: Optional[int] = None

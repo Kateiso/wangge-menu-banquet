@@ -11,6 +11,7 @@ import {
   Typography,
   Row,
   Col,
+  Radio,
 } from 'antd';
 import type { MenuRequest } from '../api/menuApi';
 
@@ -31,7 +32,10 @@ const preferenceTags = [
   '偏辣',
   '要有鸡',
   '要有鱼',
+  '要有乳鸽',
+  '要有烧鹅',
   '要招牌菜',
+  '少凉菜多热菜',
   '清淡为主',
   '有小朋友',
   '养生滋补',
@@ -46,7 +50,30 @@ interface Props {
 
 export default function OrderForm({ onSubmit, loading }: Props) {
   const [form] = Form.useForm();
+  const [mode, setMode] = useState<'retail' | 'banquet'>('retail');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  const isBanquet = mode === 'banquet';
+  const marginMarks = isBanquet
+    ? {
+        50: { label: <span style={{ fontSize: 12 }}>50%</span> },
+        62: { label: <span style={{ fontSize: 12, color: '#8b5cf6', fontWeight: 600 }}>62%</span> },
+        70: { label: <span style={{ fontSize: 12 }}>70%</span> },
+      }
+    : {
+        50: { label: <span style={{ fontSize: 12 }}>50%</span> },
+        60: { label: <span style={{ fontSize: 12, color: '#8b5cf6', fontWeight: 600 }}>60%</span> },
+        72: { label: <span style={{ fontSize: 12 }}>72%</span> },
+      };
+
+  const handleModeChange = (newMode: 'retail' | 'banquet') => {
+    setMode(newMode);
+    if (newMode === 'banquet') {
+      form.setFieldsValue({ budget: 5000, target_margin: 60, occasion: '商务宴请' });
+    } else {
+      form.setFieldsValue({ budget: 3000, target_margin: 55 });
+    }
+  };
 
   const handleFinish = (values: Record<string, unknown>) => {
     const prefs = [...selectedTags];
@@ -57,9 +84,10 @@ export default function OrderForm({ onSubmit, loading }: Props) {
       party_size: values.party_size as number,
       budget: values.budget as number,
       target_margin: values.target_margin as number,
-      occasion: (values.occasion as string) || '普通聚餐',
+      occasion: (values.occasion as string) || (isBanquet ? '商务宴请' : '普通聚餐'),
       preferences: prefs.join('，'),
       date: values.date ? (values.date as { format: (f: string) => string }).format('YYYY-MM-DD') : '',
+      mode,
     };
     onSubmit(req);
   };
@@ -78,8 +106,21 @@ export default function OrderForm({ onSubmit, loading }: Props) {
           智能配菜
         </Title>
         <Text style={{ color: '#9ca3af', fontSize: 14 }}>
-          填写需求，AI 为您推荐最佳菜品方案
+          {isBanquet
+            ? '输入宴会总价和利润目标，AI 自动配菜定价'
+            : '填写需求，AI 为您推荐最佳菜品方案'}
         </Text>
+        <div style={{ marginTop: 16 }}>
+          <Radio.Group
+            value={mode}
+            onChange={(e) => handleModeChange(e.target.value)}
+            buttonStyle="solid"
+            size="middle"
+          >
+            <Radio.Button value="retail">散客模式</Radio.Button>
+            <Radio.Button value="banquet">宴会模式</Radio.Button>
+          </Radio.Group>
+        </div>
       </div>
 
       <Card className="glass-card modern-form" style={{ padding: '8px 4px' }}>
@@ -122,9 +163,9 @@ export default function OrderForm({ onSubmit, loading }: Props) {
             </Col>
             <Col xs={24} sm={12}>
               <Form.Item
-                label="预算金额"
+                label={isBanquet ? '宴会总价' : '预算金额'}
                 name="budget"
-                rules={[{ required: true, message: '请输入预算' }]}
+                rules={[{ required: true, message: isBanquet ? '请输入宴会总价' : '请输入预算' }]}
               >
                 <InputNumber
                   min={500}
@@ -143,20 +184,16 @@ export default function OrderForm({ onSubmit, loading }: Props) {
               <span>
                 目标毛利率
                 <span style={{ color: '#9ca3af', fontWeight: 400, marginLeft: 8, fontSize: 13 }}>
-                  滑动调整
+                  {isBanquet ? '系统按此目标控制成本' : '滑动调整'}
                 </span>
               </span>
             }
             name="target_margin"
           >
             <Slider
-              min={30}
-              max={80}
-              marks={{
-                30: { label: <span style={{ fontSize: 12 }}>30%</span> },
-                55: { label: <span style={{ fontSize: 12, color: '#8b5cf6', fontWeight: 600 }}>55%</span> },
-                80: { label: <span style={{ fontSize: 12 }}>80%</span> },
-              }}
+              min={50}
+              max={72}
+              marks={marginMarks}
             />
           </Form.Item>
 
@@ -221,7 +258,7 @@ export default function OrderForm({ onSubmit, loading }: Props) {
               className="btn-gradient"
               style={{ height: 52, fontSize: 16 }}
             >
-              {loading ? 'AI 正在配菜...' : '开始智能配菜'}
+              {loading ? 'AI 正在配菜...' : isBanquet ? '生成宴会菜单' : '开始智能配菜'}
             </Button>
           </Form.Item>
         </Form>

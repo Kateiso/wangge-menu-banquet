@@ -44,10 +44,15 @@ export interface Dish {
   name: string;
   price_text: string;
   price: number;
+  min_price: number;
   cost: number;
   category: string;
   is_active: boolean;
   tags?: string;
+  is_signature?: boolean;
+  is_must_order?: boolean;
+  serving_unit?: string;
+  serving_split?: number;
 }
 
 export async function getDishes(params?: { category?: string; active_only?: boolean }): Promise<Dish[]> {
@@ -70,6 +75,30 @@ export async function updateDish(id: number, updates: Partial<Dish>): Promise<Di
   return res.json();
 }
 
+export interface DishCreateData {
+  name: string;
+  category: string;
+  price: number;
+  price_text: string;
+  serving_unit?: string;
+  serving_split?: number;
+  is_signature?: boolean;
+  is_must_order?: boolean;
+}
+
+export async function createDish(data: DishCreateData): Promise<Dish> {
+  const res = await fetch(`${BASE}/api/dishes`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '新增菜品失败' }));
+    throw new Error(err.detail || '新增菜品失败');
+  }
+  return res.json();
+}
+
 export interface MenuRequest {
   customer_name: string;
   party_size: number;
@@ -78,6 +107,7 @@ export interface MenuRequest {
   occasion: string;
   preferences: string;
   date: string;
+  mode: 'retail' | 'banquet';
 }
 
 export interface MenuItemData {
@@ -85,6 +115,7 @@ export interface MenuItemData {
   dish_name: string;
   price_text: string;
   price: number;
+  min_price: number;
   cost: number;
   quantity: number;
   subtotal: number;
@@ -96,6 +127,7 @@ export interface MenuItemData {
 export interface MenuData {
   id: string;
   customer_name: string;
+  mode: 'retail' | 'banquet';
   party_size: number;
   budget: number;
   target_margin: number;
@@ -127,8 +159,6 @@ export async function generateMenu(req: MenuRequest): Promise<MenuData> {
 }
 
 export function getExcelUrl(menuId: string): string {
-  // Direct link download might fail with Bearer auth unless we implement query param auth again or use blob download
-  // For now rely on checkToken or just let downloadExcel handle it
   return `${BASE}/api/menu/${menuId}/excel`;
 }
 

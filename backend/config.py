@@ -7,7 +7,8 @@ DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 APP_PASSWORD = os.getenv("APP_PASSWORD", "wangge2026")
 DEFAULT_MARGIN = float(os.getenv("DEFAULT_MARGIN", "55"))
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "wangge_secret_key_2026")
-TOKEN_EXPIRE_MINUTES = int(os.getenv("TOKEN_EXPIRE_MINUTES", "1440"))
+JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", os.getenv("TOKEN_EXPIRE_MINUTES", "1440")))
+TOKEN_EXPIRE_MINUTES = JWT_EXPIRE_MINUTES
 ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")

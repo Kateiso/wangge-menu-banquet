@@ -4,8 +4,8 @@ from sqlmodel import Session, select
 from backend.models.dish import Dish
 from backend.models.menu import Menu, MenuItem
 from backend.models.conversation import MenuConversation
-from backend.models.schemas import AdjustResponse, AdjustmentAction, MenuResponse, MenuItemResponse
-from backend.services.menu_engine import get_client, build_dish_catalog, CATEGORY_ORDER
+from backend.models.schemas import AdjustResponse, AdjustmentAction
+from backend.services.menu_engine import get_client, build_dish_catalog, CATEGORY_ORDER, _apply_banquet_pricing
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +62,17 @@ def analyze_adjustment_intent(session: Session, menu_id: str, user_message: str)
 ## 用户最新要求
 {user_message}
 
-## 判断规则
-- 如果用户要求模糊（如"太贵了"、"换点别的"、"不够"），用 type="ask" 追问细节
-- 如果用户要求明确（如"换掉#5"、"去掉XX加YY"、"加个海鲜"），用 type="suggest" 给出具体替换方案
+## 行动原则（优先行动，最小追问）
+- 只要能推断出意图，就用 type="suggest" 直接给方案，不要追问
+- 常见情形：
+  - "太贵了" / "便宜点"：remove 当前最贵的菜，add 同类更便宜的菜
+  - "换点别的" / "换个"：替换一道菜为同类另一道
+  - "不够" / "再加" / "多一个"：add 一道适合的菜
+  - "去掉XX" / "不要XX"：remove 对应菜品（无需 add）
+  - "加个XX" / "要XX"：add 对应类别菜品
+- 仅当用户内容完全无法对应任何菜品操作时，才用 type="ask"
 - suggest 时 remove 填要移除的当前菜单中的 dish_id，add 填要新增的菜品
-- 替换后总价应尽量保持在原预算 ¥{menu.budget:.0f} 范围内（±10%）
+- 不要因预算超限拒绝建议；后端会处理约束
 - message 用中文自然语言描述你的建议或追问
 
 ## 严格输出以下 JSON
@@ -88,7 +94,7 @@ type="ask" 时 action 设为 null"""
     content = response.choices[0].message.content.strip()
     result = json.loads(content)
 
-    msg_type = result.get("type", "ask")
+    msg_type = result.get("type", "suggest")
     message = result.get("message", "")
     action_raw = result.get("action")
 
@@ -142,10 +148,16 @@ def execute_adjustment(session: Session, menu_id: str, conversation_id: int) -> 
         if item.dish_id in remove_ids:
             session.delete(item)
 
+    is_banquet = getattr(menu, 'mode', 'retail') == 'banquet'
+
     # 添加新菜品
     for add in add_items:
         dish_id = add.get("dish_id")
         quantity = add.get("quantity", 1)
+        try:
+            quantity = max(1, int(quantity))
+        except (TypeError, ValueError):
+            quantity = 1
         reason = add.get("reason", "")
 
         if dish_id not in all_dishes:
@@ -158,10 +170,11 @@ def execute_adjustment(session: Session, menu_id: str, conversation_id: int) -> 
             dish_id=dish.id,
             dish_name=dish.name,
             price_text=dish.price_text,
-            price=dish.price,
+            price=0.0 if is_banquet else dish.price,
+            min_price=dish.min_price,
             cost=dish.cost,
             quantity=quantity,
-            subtotal=round(dish.price * quantity, 2),
+            subtotal=0.0 if is_banquet else round(dish.price * quantity, 2),
             cost_total=round(dish.cost * quantity, 2),
             category=dish.category,
             reason=reason,
@@ -172,12 +185,20 @@ def execute_adjustment(session: Session, menu_id: str, conversation_id: int) -> 
 
     # 重算汇总
     final_items = list(session.exec(select(MenuItem).where(MenuItem.menu_id == menu_id)).all())
-    total_price = sum(item.subtotal for item in final_items)
-    total_cost = sum(item.cost_total for item in final_items)
 
-    menu.total_price = round(total_price, 2)
-    menu.total_cost = round(total_cost, 2)
-    menu.margin_rate = round((total_price - total_cost) / total_price * 100, 1) if total_price > 0 else 0
+    if is_banquet:
+        # 宴会模式：重新执行反向定价，保持总价接近原 budget
+        actual_total = _apply_banquet_pricing(final_items, menu.budget)
+        total_cost = sum(item.cost_total for item in final_items)
+        menu.total_price = round(actual_total, 2)
+        menu.total_cost = round(total_cost, 2)
+        menu.margin_rate = round((actual_total - total_cost) / actual_total * 100, 1) if actual_total > 0 else 0
+    else:
+        total_price = sum(item.subtotal for item in final_items)
+        total_cost = sum(item.cost_total for item in final_items)
+        menu.total_price = round(total_price, 2)
+        menu.total_cost = round(total_cost, 2)
+        menu.margin_rate = round((total_price - total_cost) / total_price * 100, 1) if total_price > 0 else 0
 
     # 记录确认
     confirm_msg = MenuConversation(

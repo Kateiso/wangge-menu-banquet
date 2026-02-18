@@ -43,6 +43,7 @@ interface Props {
 export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading }: Props) {
   const [downloading, setDownloading] = useState(false);
 
+  const isBanquet = menu.mode === 'banquet';
   const budgetPercent = Math.round((menu.total_price / menu.budget) * 100);
   const marginOk = Math.abs(menu.margin_rate - menu.target_margin) <= 5;
 
@@ -178,7 +179,7 @@ export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading
           {/* 标题 */}
           <div style={{ textAlign: 'center', marginBottom: 20 }}>
             <Title level={4} style={{ marginBottom: 4, color: '#1f2937', fontWeight: 700 }}>
-              推荐菜单
+              {isBanquet ? '宴会菜单' : '推荐菜单'}
             </Title>
             <Space
               split={<span style={{ color: '#d1d5db' }}>·</span>}
@@ -205,19 +206,37 @@ export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading
           <Row gutter={12} style={{ marginBottom: 20 }}>
             <Col span={8}>
               <Card size="small" className="stat-card stat-card-budget">
-                <Statistic
-                  title="预算使用"
-                  value={menu.total_price}
-                  suffix={`/ ${menu.budget}`}
-                  prefix="¥"
-                  valueStyle={{ fontSize: 18 }}
-                />
-                <Progress
-                  percent={Math.min(budgetPercent, 100)}
-                  showInfo={false}
-                  size="small"
-                  style={{ marginTop: 4 }}
-                />
+                {isBanquet ? (
+                  <>
+                    <Statistic
+                      title="宴会总价"
+                      value={menu.total_price}
+                      prefix="¥"
+                      valueStyle={{ fontSize: 18 }}
+                    />
+                    <div style={{ marginTop: 4 }}>
+                      <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
+                        按预算定价
+                      </Text>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Statistic
+                      title="预算使用"
+                      value={menu.total_price}
+                      suffix={`/ ${menu.budget}`}
+                      prefix="¥"
+                      valueStyle={{ fontSize: 18 }}
+                    />
+                    <Progress
+                      percent={Math.min(budgetPercent, 100)}
+                      showInfo={false}
+                      size="small"
+                      style={{ marginTop: 4 }}
+                    />
+                  </>
+                )}
               </Card>
             </Col>
             <Col span={8}>
@@ -310,6 +329,20 @@ export default function MenuPreview({ menu, onRegenerate, onMenuUpdated, loading
               )}
             />
           </div>
+
+          {/* 宴会模式说明 */}
+          {isBanquet && (
+            <div style={{
+              marginTop: 12,
+              padding: '8px 12px',
+              background: 'rgba(139, 92, 246, 0.06)',
+              borderRadius: 8,
+              fontSize: 13,
+              color: '#6b7280',
+            }}>
+              宴会模式：单价由系统按预算自动分配，非原始菜牌价
+            </div>
+          )}
 
           {/* 操作按钮 */}
           <div

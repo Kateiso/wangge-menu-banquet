@@ -12,3 +12,9 @@ frontend/dist/
 backend/wheels/
 tmp/
 .worktrees/
+.vscode/
+backend_backup_20260217/
+backend_backup_20260217.tar
+backend/models/*.bak
+backend/models/test_write.txt
+frontend/README.md

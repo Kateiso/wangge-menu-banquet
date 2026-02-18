@@ -5,11 +5,29 @@ from sqlmodel import Session, select
 from backend.models.dish import Dish
 from backend.config import CSV_PATH
 
+CATEGORY_COST_RATIO = {
+    "凉菜": 0.28,   # 毛利高，~72%
+    "热菜": 0.38,   # 中等，~62%
+    "汤羹": 0.30,   # 汤水成本低，~70%
+    "主食": 0.25,   # 毛利最高，~75%
+    "甜品": 0.32,   # ~68%
+    "点心": 0.30,   # ~70%
+}
 
-def parse_price(price_str: str) -> tuple[str, float, bool]:
-    """解析价格字符串 → (price_text, price, is_market_price)"""
+
+def get_category_cost_ratio(category: str) -> float:
+    return CATEGORY_COST_RATIO.get(category, 0.35)
+
+
+def _extract_serving_unit(price_text: str) -> str:
+    match = re.search(r"元/([^\s/]+)", price_text)
+    return match.group(1).strip() if match else ""
+
+
+def parse_price(price_str: str) -> tuple[str, float, bool, str]:
+    """解析价格字符串 → (price_text, price, is_market_price, serving_unit)"""
     if not price_str or price_str.strip() == "":
-        return "", 0.0, False
+        return "", 0.0, False, ""
 
     price_str = price_str.strip()
 
@@ -18,19 +36,20 @@ def parse_price(price_str: str) -> tuple[str, float, bool]:
         ref_match = re.search(r"参考(\d+\.?\d*)", price_str)
         ref_price = float(ref_match.group(1)) if ref_match else 0.0
         price_text = price_str if "参考" in price_str else f"时价(参考0元)/例"
-        return price_text, ref_price, True
+        return price_text, ref_price, True, _extract_serving_unit(price_text)
 
     # 标准价格: 99元/例、53元/只、13.9元/件
     match = re.match(r"^(\d+\.?\d*)元/(.+)$", price_str)
     if match:
-        return price_str, float(match.group(1)), False
+        serving_unit = match.group(2).strip()
+        return price_str, float(match.group(1)), False, serving_unit
 
     # 尝试直接提取数字
     num_match = re.search(r"(\d+\.?\d*)", price_str)
     if num_match:
-        return price_str, float(num_match.group(1)), False
+        return price_str, float(num_match.group(1)), False, _extract_serving_unit(price_str)
 
-    return price_str, 0.0, False
+    return price_str, 0.0, False, _extract_serving_unit(price_str)
 
 
 def infer_category(name: str, cooking_method: str, scene: str) -> str:
@@ -103,7 +122,7 @@ def import_dishes_from_csv(session: Session) -> int:
             if not price_raw:
                 continue
 
-            price_text, price, is_market_price = parse_price(price_raw)
+            price_text, price, is_market_price, serving_unit = parse_price(price_raw)
 
             cooking_method = row.get("烹饪方式", "").strip()
             scene = row.get("场景推荐", "").strip()
@@ -112,19 +131,12 @@ def import_dishes_from_csv(session: Session) -> int:
             tags = build_tags(row)
 
             # 成本按品类基准 + 菜品名哈希微调，模拟真实差异
-            base_cost_ratio = {
-                "凉菜": 0.28,   # 毛利高，~72%
-                "热菜": 0.38,   # 中等，~62%
-                "汤羹": 0.30,   # 汤水成本低，~70%
-                "主食": 0.25,   # 毛利最高，~75%
-                "甜品": 0.32,   # ~68%
-                "点心": 0.30,   # ~70%
-            }
-            ratio = base_cost_ratio.get(category, 0.35)
+            ratio = get_category_cost_ratio(category)
             # 用菜名哈希生成 ±0.08 的浮动，让每道菜不一样
             name_hash = int(hashlib.md5(name.encode()).hexdigest()[:8], 16)
             jitter = ((name_hash % 160) - 80) / 1000  # -0.08 ~ +0.08
             cost = round(price * max(0.15, min(0.55, ratio + jitter)), 2)
+            min_price = round(cost * 1.3, 2)
 
             dish = Dish(
                 name=name,
@@ -132,9 +144,12 @@ def import_dishes_from_csv(session: Session) -> int:
                 price=price,
                 is_market_price=is_market_price,
                 cost=cost,
+                min_price=min_price,
                 category=category,
                 tags=tags,
                 is_active=True,
+                serving_unit=serving_unit,
+                serving_split=0,
             )
             session.add(dish)
             count += 1
