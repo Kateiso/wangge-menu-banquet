@@ -62,11 +62,17 @@ def analyze_adjustment_intent(session: Session, menu_id: str, user_message: str)
 ## 用户最新要求
 {user_message}
 
-## 判断规则
-- 如果用户要求模糊（如"太贵了"、"换点别的"、"不够"），用 type="ask" 追问细节
-- 如果用户要求明确（如"换掉#5"、"去掉XX加YY"、"加个海鲜"），用 type="suggest" 给出具体替换方案
+## 行动原则（优先行动，最小追问）
+- 只要能推断出意图，就用 type="suggest" 直接给方案，不要追问
+- 常见情形：
+  - "太贵了" / "便宜点"：remove 当前最贵的菜，add 同类更便宜的菜
+  - "换点别的" / "换个"：替换一道菜为同类另一道
+  - "不够" / "再加" / "多一个"：add 一道适合的菜
+  - "去掉XX" / "不要XX"：remove 对应菜品（无需 add）
+  - "加个XX" / "要XX"：add 对应类别菜品
+- 仅当用户内容完全无法对应任何菜品操作时，才用 type="ask"
 - suggest 时 remove 填要移除的当前菜单中的 dish_id，add 填要新增的菜品
-- 替换后总价应尽量保持在原预算 ¥{menu.budget:.0f} 范围内（±10%）
+- 不要因预算超限拒绝建议；后端会处理约束
 - message 用中文自然语言描述你的建议或追问
 
 ## 严格输出以下 JSON
@@ -88,7 +94,7 @@ type="ask" 时 action 设为 null"""
     content = response.choices[0].message.content.strip()
     result = json.loads(content)
 
-    msg_type = result.get("type", "ask")
+    msg_type = result.get("type", "suggest")
     message = result.get("message", "")
     action_raw = result.get("action")
 
