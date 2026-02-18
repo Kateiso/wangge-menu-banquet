@@ -475,6 +475,11 @@ def validate_and_build_banquet_menu(
 
 
 def generate_menu(session: Session, request: MenuGenerateRequest) -> tuple[Menu, list[MenuItem]]:
+    if request.target_margin < 50 or request.target_margin > 72:
+        raise ValueError(
+            f"目标毛利 {request.target_margin:.0f}% 超出可达范围（50%-72%），建议调整至 55%-65% 以获得最佳结果"
+        )
+
     active_dishes = list(session.exec(select(Dish).where(Dish.is_active == True)).all())
     priority_dishes = [
         dish for dish in active_dishes if dish.is_signature or dish.is_must_order

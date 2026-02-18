@@ -54,6 +54,17 @@ export default function OrderForm({ onSubmit, loading }: Props) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   const isBanquet = mode === 'banquet';
+  const marginMarks = isBanquet
+    ? {
+        50: { label: <span style={{ fontSize: 12 }}>50%</span> },
+        62: { label: <span style={{ fontSize: 12, color: '#8b5cf6', fontWeight: 600 }}>62%</span> },
+        70: { label: <span style={{ fontSize: 12 }}>70%</span> },
+      }
+    : {
+        50: { label: <span style={{ fontSize: 12 }}>50%</span> },
+        60: { label: <span style={{ fontSize: 12, color: '#8b5cf6', fontWeight: 600 }}>60%</span> },
+        72: { label: <span style={{ fontSize: 12 }}>72%</span> },
+      };
 
   const handleModeChange = (newMode: 'retail' | 'banquet') => {
     setMode(newMode);
@@ -180,13 +191,9 @@ export default function OrderForm({ onSubmit, loading }: Props) {
             name="target_margin"
           >
             <Slider
-              min={30}
-              max={80}
-              marks={{
-                30: { label: <span style={{ fontSize: 12 }}>30%</span> },
-                55: { label: <span style={{ fontSize: 12, color: '#8b5cf6', fontWeight: 600 }}>55%</span> },
-                80: { label: <span style={{ fontSize: 12 }}>80%</span> },
-              }}
+              min={50}
+              max={72}
+              marks={marginMarks}
             />
           </Form.Item>
 
