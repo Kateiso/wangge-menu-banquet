@@ -167,6 +167,52 @@ class TestDishList:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# 2.5 DISH CREATE TESTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestDishCreate:
+    """Test POST /api/dishes create endpoint with RBAC and derived fields."""
+
+    def test_admin_can_create_dish(self, client):
+        token = _login(client, "admin", "wangge2026")
+        payload = {
+            "name": "椒盐九肚鱼",
+            "category": "热菜",
+            "price": 128.0,
+            "price_text": "128元/例",
+            "serving_unit": "例",
+            "serving_split": 0,
+            "is_signature": True,
+            "is_must_order": False,
+        }
+        res = client.post("/api/dishes", json=payload, headers=_auth_header(token))
+        assert res.status_code == 201
+        data = res.json()
+        assert data["name"] == payload["name"]
+        assert data["category"] == payload["category"]
+        assert data["cost"] == 48.64  # 128 * 热菜0.38
+        assert data["min_price"] == 63.23  # 48.64 * 1.3
+        assert data["is_active"] is True
+
+    def test_staff_cannot_create_dish(self, client):
+        token = _login(client, "chef", "chef123")
+        res = client.post(
+            "/api/dishes",
+            json={"name": "新菜", "category": "凉菜", "price": 68.0, "price_text": "68元/例"},
+            headers=_auth_header(token),
+        )
+        assert res.status_code == 403
+
+    def test_create_requires_auth(self, client):
+        res = client.post(
+            "/api/dishes",
+            json={"name": "无权限菜", "category": "凉菜", "price": 68.0, "price_text": "68元/例"},
+        )
+        assert res.status_code == 401
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 3. DISH UPDATE — PERMISSION TESTS
 # ══════════════════════════════════════════════════════════════════════════════
 

@@ -5,6 +5,19 @@ from sqlmodel import Session, select
 from backend.models.dish import Dish
 from backend.config import CSV_PATH
 
+CATEGORY_COST_RATIO = {
+    "凉菜": 0.28,   # 毛利高，~72%
+    "热菜": 0.38,   # 中等，~62%
+    "汤羹": 0.30,   # 汤水成本低，~70%
+    "主食": 0.25,   # 毛利最高，~75%
+    "甜品": 0.32,   # ~68%
+    "点心": 0.30,   # ~70%
+}
+
+
+def get_category_cost_ratio(category: str) -> float:
+    return CATEGORY_COST_RATIO.get(category, 0.35)
+
 
 def _extract_serving_unit(price_text: str) -> str:
     match = re.search(r"元/([^\s/]+)", price_text)
@@ -118,15 +131,7 @@ def import_dishes_from_csv(session: Session) -> int:
             tags = build_tags(row)
 
             # 成本按品类基准 + 菜品名哈希微调，模拟真实差异
-            base_cost_ratio = {
-                "凉菜": 0.28,   # 毛利高，~72%
-                "热菜": 0.38,   # 中等，~62%
-                "汤羹": 0.30,   # 汤水成本低，~70%
-                "主食": 0.25,   # 毛利最高，~75%
-                "甜品": 0.32,   # ~68%
-                "点心": 0.30,   # ~70%
-            }
-            ratio = base_cost_ratio.get(category, 0.35)
+            ratio = get_category_cost_ratio(category)
             # 用菜名哈希生成 ±0.08 的浮动，让每道菜不一样
             name_hash = int(hashlib.md5(name.encode()).hexdigest()[:8], 16)
             jitter = ((name_hash % 160) - 80) / 1000  # -0.08 ~ +0.08

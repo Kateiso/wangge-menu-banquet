@@ -75,6 +75,30 @@ export async function updateDish(id: number, updates: Partial<Dish>): Promise<Di
   return res.json();
 }
 
+export interface DishCreateData {
+  name: string;
+  category: string;
+  price: number;
+  price_text: string;
+  serving_unit?: string;
+  serving_split?: number;
+  is_signature?: boolean;
+  is_must_order?: boolean;
+}
+
+export async function createDish(data: DishCreateData): Promise<Dish> {
+  const res = await fetch(`${BASE}/api/dishes`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '新增菜品失败' }));
+    throw new Error(err.detail || '新增菜品失败');
+  }
+  return res.json();
+}
+
 export interface MenuRequest {
   customer_name: string;
   party_size: number;
