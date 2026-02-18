@@ -84,7 +84,7 @@ def generate_excel(menu: Menu, items: list[MenuItem]) -> io.BytesIO:
         row += 1
 
         # 表头
-        headers = ["序号", "菜名", "单价", "数量", "小计", "备注"]
+        headers = ["序号", "菜名", "单价(¥)", "数量", "小计", "备注"]
         for c, h in enumerate(headers, 1):
             cell = ws.cell(row=row, column=c, value=h)
             cell.font = header_font
@@ -95,36 +95,32 @@ def generate_excel(menu: Menu, items: list[MenuItem]) -> io.BytesIO:
 
         # 菜品行
         for idx, item in enumerate(cat_items, 1):
-            price_display = item.price_text
-            market_mark = ""
-            if "时价" in item.price_text:
+            is_market_price = "时价" in item.price_text
+            if is_market_price:
                 has_market_price = True
-                market_mark = " *"
 
             ws.cell(row=row, column=1, value=idx).font = normal_font
             ws.cell(row=row, column=1).alignment = Alignment(horizontal="center")
 
             ws.cell(row=row, column=2, value=item.dish_name).font = normal_font
 
-            ws.cell(row=row, column=3, value=f"{price_display}{market_mark}").font = normal_font
-            ws.cell(row=row, column=3).alignment = Alignment(horizontal="center")
+            ws.cell(row=row, column=3, value=item.price).font = normal_font
+            ws.cell(row=row, column=3).number_format = '#,##0.00'
+            ws.cell(row=row, column=3).alignment = Alignment(horizontal="right")
 
             ws.cell(row=row, column=4, value=item.quantity).font = normal_font
             ws.cell(row=row, column=4).alignment = Alignment(horizontal="center")
 
-            # 小计用公式 (price列 × quantity列没有直接对应，用数值公式)
-            # 由于单价是文本带单位，用实际数值填写公式
-            price_cell = f"C{row}"
-            qty_cell = f"D{row}"
-            # 直接用数值而非公式引用文本列
             subtotal_cell_ref = f"E{row}"
-            # 用 =price*qty 的数值版本
-            ws.cell(row=row, column=5, value=item.subtotal).font = normal_font
+            ws.cell(row=row, column=5, value=f"=C{row}*D{row}").font = normal_font
             ws.cell(row=row, column=5).number_format = '#,##0.00'
             ws.cell(row=row, column=5).alignment = Alignment(horizontal="right")
             subtotal_cells.append(subtotal_cell_ref)
 
-            ws.cell(row=row, column=6, value=item.reason).font = normal_font
+            note = item.reason or ""
+            if is_market_price:
+                note = f"{note} (时价)".strip()
+            ws.cell(row=row, column=6, value=note).font = normal_font
 
             for c in range(1, 7):
                 ws.cell(row=row, column=c).border = thin_border
