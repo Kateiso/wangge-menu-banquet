@@ -509,12 +509,12 @@ def generate_menu(session: Session, request: MenuGenerateRequest) -> tuple[Menu,
 
     logger.info(f'调用 DeepSeek ({request.mode}) 为 {request.party_size} 人配菜，预算 {request.budget} 元')
 
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             llm_result = call_deepseek(prompt)
             menu, items = validator(session, request, llm_result)
             if not items:
-                if attempt == 2:
+                if attempt == 1:
                     raise ValueError('未生成有效菜品或毛利不足，请尝试调整预算或目标毛利')
                 
                 feedback = '上一次结果需修正：毛利不足或未生成菜品，请尝试替换一些成本较低的菜品。' if is_banquet else '上一次返回为空菜单，请按规则重新生成。'
@@ -532,14 +532,14 @@ def generate_menu(session: Session, request: MenuGenerateRequest) -> tuple[Menu,
                 retry_reasons = []
                 budget_ratio = menu.total_price / request.budget if request.budget > 0 else 1
                 margin_gap = abs(menu.margin_rate - request.target_margin)
-                if budget_ratio < 0.90:
+                if budget_ratio < 0.85:
                     retry_reasons.append(f'总价仅 {menu.total_price:.0f} 元，低于最低预算要求。')
-                if budget_ratio > 1.05:
+                if budget_ratio > 1.10:
                     retry_reasons.append(f'总价 {menu.total_price:.0f} 元，超过预算上限。')
-                if margin_gap > 5:
+                if margin_gap > 8:
                     retry_reasons.append(f'毛利率 {menu.margin_rate:.1f}% 与目标 {request.target_margin:.1f}% 偏差过大。')
 
-                if retry_reasons and attempt < 2:
+                if retry_reasons and attempt < 1:
                     for item in items: session.delete(item)
                     session.delete(menu)
                     session.commit()
@@ -548,7 +548,7 @@ def generate_menu(session: Session, request: MenuGenerateRequest) -> tuple[Menu,
                         feedback_note='\n## 上一次结果需修正\n' + '\n'.join([f'- {r}' for r in retry_reasons])
                     )
                     continue
-                if retry_reasons and attempt == 2:
+                if retry_reasons and attempt == 1:
                     for item in items:
                         session.delete(item)
                     session.delete(menu)
@@ -558,7 +558,7 @@ def generate_menu(session: Session, request: MenuGenerateRequest) -> tuple[Menu,
                 # 宴会模式：检查成本是否偏离过大
                 target_cost = request.budget * (1 - request.target_margin / 100)
                 cost_ratio = menu.total_cost / target_cost if target_cost > 0 else 1
-                if (cost_ratio < 0.85 or cost_ratio > 1.15) and attempt < 2:
+                if (cost_ratio < 0.85 or cost_ratio > 1.15) and attempt < 1:
                     note = f'总成本 {menu.total_cost:.0f} 元，目标 {target_cost:.0f} 元，偏差过大。'
                     for item in items: session.delete(item)
                     session.delete(menu)
@@ -572,6 +572,6 @@ def generate_menu(session: Session, request: MenuGenerateRequest) -> tuple[Menu,
             return menu, items
         except Exception as e:
             logger.error(f'第 {attempt + 1} 次尝试失败: {e}')
-            if attempt == 2: raise
+            if attempt == 1: raise
 
     raise ValueError('无法生成有效菜单，请重试')
