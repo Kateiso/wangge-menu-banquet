@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Card, Table, InputNumber, Button, Space, Tag, Radio, Statistic,
   Modal, Input, Select, message, Popconfirm, Typography, Spin, Row, Col,
@@ -31,6 +31,7 @@ export default function MenuEditor({ menu, user, onBack, onMenuUpdated }: Props)
   const [allDishes, setAllDishes] = useState<Dish[]>([]);
   const [dishSearch, setDishSearch] = useState('');
   const [dishLoading, setDishLoading] = useState(false);
+  const [specCache, setSpecCache] = useState<Record<number, DishSpec[]>>({});
 
   const isAdmin = user.role === 'admin';
 
@@ -51,9 +52,36 @@ export default function MenuEditor({ menu, user, onBack, onMenuUpdated }: Props)
     }
   };
 
+  const fetchSpecsForDish = async (dishId: number) => {
+    try {
+      const specs = await getDishSpecs(dishId);
+      setSpecCache((prev) => ({ ...prev, [dishId]: specs }));
+    } catch (e: any) {
+      message.error(e.message);
+    }
+  };
+
+  useEffect(() => {
+    const uniqueDishIds = [...new Set(menu.items.map((item) => item.dish_id))];
+    uniqueDishIds
+      .filter((dishId) => specCache[dishId] === undefined)
+      .forEach((dishId) => {
+        void fetchSpecsForDish(dishId);
+      });
+  }, [menu.items, specCache]);
+
   const handlePriceChange = async (itemId: number, price: number) => {
     try {
       await updateMenuItem(menu.id, itemId, { adjusted_price: price });
+      await refreshMenu();
+    } catch (e: any) {
+      message.error(e.message);
+    }
+  };
+
+  const handleSpecChange = async (itemId: number, specId: number) => {
+    try {
+      await updateMenuItem(menu.id, itemId, { spec_id: specId });
       await refreshMenu();
     } catch (e: any) {
       message.error(e.message);
@@ -154,9 +182,30 @@ export default function MenuEditor({ menu, user, onBack, onMenuUpdated }: Props)
         <Space>
           <Tag color={getCategoryColor(record.category)}>{record.category}</Tag>
           {name}
-          {record.spec_name && <Text type="secondary" style={{ fontSize: 12 }}>({record.spec_name})</Text>}
         </Space>
       ),
+    },
+    {
+      title: '规格',
+      width: 180,
+      render: (_: any, record: MenuItemData) => {
+        const specs = specCache[record.dish_id] || [];
+        if (specs.length === 0) return '-';
+
+        return (
+          <Select
+            value={record.spec_id ?? undefined}
+            placeholder="选择规格"
+            size="small"
+            style={{ width: 160 }}
+            options={specs.map((spec) => ({
+              value: spec.id,
+              label: `${spec.spec_name} ¥${spec.price}`,
+            }))}
+            onChange={(value) => record.id && handleSpecChange(record.id, value)}
+          />
+        );
+      },
     },
     {
       title: '数量',
