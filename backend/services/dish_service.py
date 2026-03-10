@@ -3,6 +3,7 @@ import re
 import hashlib
 from sqlmodel import Session, select
 from backend.models.dish import Dish
+from backend.models.dish_spec import DishSpec
 from backend.config import CSV_PATH
 
 CATEGORY_COST_RATIO = {
@@ -170,3 +171,45 @@ def get_dishes_by_category(session: Session) -> dict[str, list[Dish]]:
     for dish in dishes:
         grouped.setdefault(dish.category, []).append(dish)
     return grouped
+
+
+# ── DishSpec CRUD ──
+
+def list_specs(session: Session, dish_id: int) -> list[DishSpec]:
+    return list(session.exec(
+        select(DishSpec)
+        .where(DishSpec.dish_id == dish_id)
+        .order_by(DishSpec.sort_order)
+    ).all())
+
+
+def create_spec(session: Session, dish_id: int, **kwargs) -> DishSpec:
+    dish = session.get(Dish, dish_id)
+    if not dish:
+        raise ValueError("菜品不存在")
+    spec = DishSpec(dish_id=dish_id, **kwargs)
+    session.add(spec)
+    session.commit()
+    session.refresh(spec)
+    return spec
+
+
+def update_spec(session: Session, spec_id: int, **kwargs) -> DishSpec:
+    spec = session.get(DishSpec, spec_id)
+    if not spec:
+        raise ValueError("规格不存在")
+    for k, v in kwargs.items():
+        if v is not None:
+            setattr(spec, k, v)
+    session.add(spec)
+    session.commit()
+    session.refresh(spec)
+    return spec
+
+
+def delete_spec(session: Session, spec_id: int) -> None:
+    spec = session.get(DishSpec, spec_id)
+    if not spec:
+        raise ValueError("规格不存在")
+    session.delete(spec)
+    session.commit()

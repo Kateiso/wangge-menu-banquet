@@ -4,7 +4,8 @@ from backend.models.dish import Dish
 from backend.models.user import User
 from backend.database import get_session
 from backend.auth_utils import get_current_user, get_current_admin
-from backend.services.dish_service import get_category_cost_ratio
+from backend.services.dish_service import get_category_cost_ratio, list_specs, create_spec, update_spec, delete_spec
+from backend.models.schemas import DishSpecCreate, DishSpecUpdate, DishSpecResponse
 from typing import Optional
 from pydantic import BaseModel
 
@@ -127,3 +128,54 @@ def update_dish(
     session.commit()
     session.refresh(dish)
     return dish
+
+
+# ── DishSpec 子端点 ──
+
+@router.get("/{dish_id}/specs", response_model=list[DishSpecResponse])
+def api_list_specs(
+    dish_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    return list_specs(session, dish_id)
+
+
+@router.post("/{dish_id}/specs", response_model=DishSpecResponse, status_code=201)
+def api_create_spec(
+    dish_id: int,
+    data: DishSpecCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_admin),
+):
+    try:
+        spec = create_spec(session, dish_id, **data.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return spec
+
+
+@router.put("/specs/{spec_id}", response_model=DishSpecResponse)
+def api_update_spec(
+    spec_id: int,
+    data: DishSpecUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_admin),
+):
+    try:
+        spec = update_spec(session, spec_id, **data.model_dump(exclude_unset=True))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return spec
+
+
+@router.delete("/specs/{spec_id}", status_code=204)
+def api_delete_spec(
+    spec_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(require_admin),
+):
+    try:
+        delete_spec(session, spec_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

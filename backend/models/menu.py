@@ -20,6 +20,10 @@ class Menu(SQLModel, table=True):
     total_price: float = 0.0
     total_cost: float = 0.0
     margin_rate: float = 0.0
+    pricing_mode: str = 'additive'
+    fixed_price: float = 0.0
+    table_count: int = 1
+    date: str = ''
     created_at: datetime = Field(default_factory=datetime.now)
 
 
@@ -37,3 +41,6 @@ class MenuItem(SQLModel, table=True):
     cost_total: float = 0.0
     category: str = ''
     reason: str = ''
+    spec_id: int | None = None
+    spec_name: str = ''
+    adjusted_price: float = 0.0

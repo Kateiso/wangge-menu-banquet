@@ -11,13 +11,16 @@ from sqlmodel import SQLModel, Session
 from backend.database import engine
 from backend.config import ALLOWED_ORIGINS, RATE_LIMIT_PER_MINUTE
 from backend.models.dish import Dish  # noqa: F401
+from backend.models.dish_spec import DishSpec  # noqa: F401
 from backend.models.menu import Menu, MenuItem  # noqa: F401
+from backend.models.package import PackageGroup, Package, PackageItem  # noqa: F401
 from backend.models.conversation import MenuConversation  # noqa: F401
 from backend.models.user import User, create_default_users  # noqa: F401
 from backend.services.dish_service import import_dishes_from_csv
 from backend.routers.menu import router as menu_router
 from backend.routers.auth import router as auth_router
 from backend.routers.dish import router as dish_router
+from backend.routers.package import router as package_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,22 +30,6 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # 启动时创建表并导入 CSV + 初始化用户
     SQLModel.metadata.create_all(engine)
-
-    # 自动迁移：为已有数据库添加宴会模式所需字段
-    from sqlalchemy import inspect, text
-
-    inspector = inspect(engine)
-    with engine.connect() as conn:
-        if "min_price" not in {c["name"] for c in inspector.get_columns("dish")}:
-            conn.execute(text("ALTER TABLE dish ADD COLUMN min_price REAL DEFAULT 0.0"))
-            conn.execute(text("UPDATE dish SET min_price = ROUND(cost * 1.3, 2) WHERE min_price = 0"))
-            conn.commit()
-        if "mode" not in {c["name"] for c in inspector.get_columns("menu")}:
-            conn.execute(text("ALTER TABLE menu ADD COLUMN mode TEXT DEFAULT 'retail'"))
-            conn.commit()
-        if "min_price" not in {c["name"] for c in inspector.get_columns("menuitem")}:
-            conn.execute(text("ALTER TABLE menuitem ADD COLUMN min_price REAL DEFAULT 0.0"))
-            conn.commit()
 
     with Session(engine) as session:
         count = import_dishes_from_csv(session)
@@ -104,6 +91,7 @@ async def health():
 app.include_router(auth_router)
 app.include_router(dish_router)
 app.include_router(menu_router)
+app.include_router(package_router)
 
 frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(frontend_dist):

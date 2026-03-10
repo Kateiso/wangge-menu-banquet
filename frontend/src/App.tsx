@@ -1,12 +1,11 @@
-
 import { useState, useEffect } from 'react';
 import { ConfigProvider, Input, Button, Card, Typography, message, theme, Layout, Menu as AntMenu, Space, Tag } from 'antd';
 import { LockOutlined, UserOutlined, UnorderedListOutlined, FormOutlined, LogoutOutlined } from '@ant-design/icons';
 import zhCN from 'antd/locale/zh_CN';
-import { login, generateMenu, getMe } from './api/menuApi';
-import type { MenuRequest, MenuData, User } from './api/menuApi';
-import OrderForm from './components/OrderForm';
-import MenuPreview from './components/MenuPreview';
+import { login, getMe } from './api/menuApi';
+import type { MenuData, User } from './api/menuApi';
+import PackageSelector from './components/PackageSelector';
+import MenuEditor from './components/MenuEditor';
 import DishManager from './components/DishManager';
 import './App.css';
 
@@ -20,17 +19,15 @@ function App() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [menuData, setMenuData] = useState<MenuData | null>(null);
-  const [view, setView] = useState<'menu' | 'dishes'>('menu'); // 'menu' | 'dishes'
+  const [view, setView] = useState<'menu' | 'dishes'>('menu');
 
   useEffect(() => {
-    // Check if already logged in
     getMe()
       .then((u) => {
         setUser(u);
         setIsLoggedIn(true);
       })
       .catch(() => {
-        // Token invalid or expired
         localStorage.removeItem('wg_token');
       });
   }, []);
@@ -63,23 +60,17 @@ function App() {
     setPassword('');
   };
 
-  const handleSubmit = async (req: MenuRequest) => {
-    setLoading(true);
+  const handleBack = () => {
     setMenuData(null);
-    try {
-      const data = await generateMenu(req);
-      setMenuData(data);
-      message.success('菜单生成成功！');
-    } catch (error: any) {
-      message.error(error.message || '生成失败，请重试');
-    } finally {
-      setLoading(false);
-    }
   };
 
-  const handleRegenerate = () => {
-    setMenuData(null);
-  };
+  // 菜品管理仅 admin 可见
+  const menuItems = [
+    { key: 'menu', icon: <FormOutlined />, label: '点菜' },
+    ...(user?.role === 'admin' ? [
+      { key: 'dishes', icon: <UnorderedListOutlined />, label: '菜品管理' },
+    ] : []),
+  ];
 
   // Login Screen
   if (!isLoggedIn) {
@@ -144,15 +135,12 @@ function App() {
           position: 'sticky', top: 0, zIndex: 10
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Title level={4} style={{ margin: 0, color: '#8b5cf6' }}>旺阁渔村 AI</Title>
+            <Title level={4} style={{ margin: 0, color: '#8b5cf6' }}>旺阁渔村</Title>
             <AntMenu
               mode="horizontal"
               selectedKeys={[view]}
-              onClick={(e) => setView(e.key as any)}
-              items={[
-                { key: 'menu', icon: <FormOutlined />, label: '点菜生成' },
-                { key: 'dishes', icon: <UnorderedListOutlined />, label: '菜品管理' },
-              ]}
+              onClick={(e) => { setView(e.key as any); setMenuData(null); }}
+              items={menuItems}
               style={{ borderBottom: 'none', width: 300 }}
             />
           </div>
@@ -164,16 +152,21 @@ function App() {
           </Space>
         </Header>
 
-        <Content style={{ padding: '24px', maxWidth: 1200, margin: '0 auto', width: '100%' }}>
+        <Content style={{ padding: '24px', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
           {view === 'menu' ? (
             !menuData ? (
-              <OrderForm onSubmit={handleSubmit} loading={loading} />
-            ) : (
-              <MenuPreview
-                menu={menuData}
-                onRegenerate={handleRegenerate}
-                onMenuUpdated={(nextMenu) => setMenuData(nextMenu)}
+              <PackageSelector
+                user={user!}
+                onMenuCreated={(m) => setMenuData(m)}
                 loading={loading}
+                setLoading={setLoading}
+              />
+            ) : (
+              <MenuEditor
+                menu={menuData}
+                user={user!}
+                onBack={handleBack}
+                onMenuUpdated={(nextMenu) => setMenuData(nextMenu)}
               />
             )
           ) : (

@@ -141,9 +141,9 @@ export default function MenuAdjustChat({ menuId, onMenuUpdated }: Props) {
                 lineHeight: 1.6,
               }}
             >
-              输入需求调整菜单
+              说出你的想法，AI 帮你调整
               <br />
-              如"换掉凉菜"、"加个海鲜"
+              如"虾不要了"、"加个青菜"、"贵了便宜点"
             </Text>
           </div>
         )}
