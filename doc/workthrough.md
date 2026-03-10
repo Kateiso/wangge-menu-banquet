@@ -34,3 +34,8 @@
 - 前端类型检查：`cd frontend && npx tsc --noEmit` 通过。
 - 后端导入检查：`source ../旺阁渔村_点菜系统开发/.venv/bin/activate && python -c "from backend.main import app"` 通过。
 - 后端回归测试：`python -m pytest backend/tests/test_auth_and_dishes.py -q`，`27 passed in 11.97s`。
+
+## 2026-03-10 文档真源收敛
+- 决策：保留 `AGENTS.md` 作为仓库唯一指令文档，删除重复的 `CLAUDE.md`。
+- 真源内容：以原 `CLAUDE.md` 的最新版内容为准，旧 `AGENTS.md` 不再保留。
+- 目的：避免两份说明文档继续分叉，减少 Agent 读取到过期项目上下文的风险。
