@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import {
   Card, Input, InputNumber, DatePicker, Button, Tabs, Space, Empty,
-  message, Spin, Tag, Modal, Drawer, Typography
+  message, Spin, Tag, Modal, Drawer, Typography, Popconfirm
 } from 'antd';
 import {
-  PlusOutlined, EditOutlined, RobotOutlined, AppstoreOutlined,
+  PlusOutlined, EditOutlined, RobotOutlined, AppstoreOutlined, DeleteOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
   getPackageGroups, createMenuFromPackage, aiCreatePackage,
-  createPackageGroup, createPackage,
+  createPackageGroup, createPackage, deletePackage,
 } from '../api/menuApi';
 import type { PackageGroup, MenuData, User } from '../api/menuApi';
 import PackageTemplateEditor from './PackageTemplateEditor';
@@ -124,6 +124,16 @@ export default function PackageSelector({ user, onMenuCreated, loading, setLoadi
     }
   };
 
+  const handleDeletePackage = async (packageId: number, packageName: string) => {
+    try {
+      await deletePackage(packageId);
+      message.success(`套餐「${packageName}」已删除`);
+      await fetchGroups();
+    } catch (e: any) {
+      message.error(e.message);
+    }
+  };
+
   const tabItems = groups.map((group) => ({
     key: String(group.id),
     label: group.name,
@@ -147,7 +157,10 @@ export default function PackageSelector({ user, onMenuCreated, loading, setLoadi
             styles={{ body: { padding: 16 } }}
             onClick={() => handleSelectPackage(pkg.id)}
           >
-            <div style={{ position: 'absolute', top: 8, right: 8 }}>
+            <div
+              style={{ position: 'absolute', top: 8, right: 8 }}
+              onClick={(e) => e.stopPropagation()}
+            >
               <Button
                 type="text"
                 size="small"
@@ -158,6 +171,20 @@ export default function PackageSelector({ user, onMenuCreated, loading, setLoadi
                   setEditorOpen(true);
                 }}
               />
+              <Popconfirm
+                title="确认删除这个套餐？"
+                okText="删除"
+                cancelText="取消"
+                onConfirm={() => handleDeletePackage(pkg.id, pkg.name)}
+              >
+                <Button
+                  type="text"
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </Popconfirm>
             </div>
             <Title level={5} style={{ margin: 0, marginBottom: 4 }}>{pkg.name}</Title>
             {pkg.description && (

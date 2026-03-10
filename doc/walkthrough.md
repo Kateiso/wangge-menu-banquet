@@ -41,4 +41,13 @@
 
 #### Step 4: 套餐删除按钮
 
-- 待执行。
+- `PackageSelector` 引入 `deletePackage()`、`DeleteOutlined` 和 `Popconfirm`。
+- 套餐卡片右上角现在同时提供编辑和删除两个入口。
+- 删除动作会先确认，再调用后端软删除接口，成功后刷新分组列表。
+
+### 验证结果
+
+- `frontend`: `npx tsc --noEmit` 通过。
+- `backend`: `.venv/bin/python -c "from backend.main import app"` 通过。
+- 导入脚本首跑结果：`导入完成: 分组 2 个, 套餐 13 个, 自动补菜 154 道`。
+- 导入脚本二次运行结果：按分组名跳过 `婚宴套餐` 与 `团年套餐`，确认幂等。
