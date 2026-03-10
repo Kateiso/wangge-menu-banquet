@@ -80,10 +80,6 @@ export interface DishCreateData {
   category: string;
   price: number;
   price_text: string;
-  serving_unit?: string;
-  serving_split?: number;
-  is_signature?: boolean;
-  is_must_order?: boolean;
 }
 
 export async function createDish(data: DishCreateData): Promise<Dish> {
