@@ -117,6 +117,12 @@ export async function getDishSpecs(dishId: number): Promise<DishSpec[]> {
   return res.json();
 }
 
+export async function getBatchDishSpecs(dishIds: number[]): Promise<Record<number, DishSpec[]>> {
+  const res = await fetch(`${BASE}/api/dishes/specs/batch?dish_ids=${dishIds.join(",")}`, { headers: headers() });
+  if (!res.ok) throw new Error("获取规格失败");
+  return res.json();
+}
+
 export async function createDishSpec(dishId: number, data: Omit<DishSpec, 'id' | 'dish_id' | 'is_active'>): Promise<DishSpec> {
   const res = await fetch(`${BASE}/api/dishes/${dishId}/specs`, {
     method: 'POST',

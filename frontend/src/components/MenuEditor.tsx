@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons';
 import {
   updateMenuItem, addMenuItem, removeMenuItem, updateMenuPricing,
-  downloadExcel, getMenuDetail, getDishes, getDishSpecs,
+  downloadExcel, getMenuDetail, getDishes, getBatchDishSpecs,
 } from '../api/menuApi';
 import type { MenuData, MenuItemData, User, Dish, DishSpec } from '../api/menuApi';
 import MenuAdjustChat from './MenuAdjustChat';
@@ -52,23 +52,17 @@ export default function MenuEditor({ menu, user, onBack, onMenuUpdated }: Props)
     }
   };
 
-  const fetchSpecsForDish = async (dishId: number) => {
-    try {
-      const specs = await getDishSpecs(dishId);
-      setSpecCache((prev) => ({ ...prev, [dishId]: specs }));
-    } catch (e: any) {
-      message.error(e.message);
-    }
-  };
-
   useEffect(() => {
-    const uniqueDishIds = [...new Set(menu.items.map((item) => item.dish_id))];
-    uniqueDishIds
-      .filter((dishId) => specCache[dishId] === undefined)
-      .forEach((dishId) => {
-        void fetchSpecsForDish(dishId);
-      });
-  }, [menu.items, specCache]);
+    const missingIds = [...new Set(menu.items.map((item) => item.dish_id))]
+      .filter((id) => specCache[id] === undefined);
+    if (missingIds.length === 0) return;
+
+    getBatchDishSpecs(missingIds)
+      .then((batchResult) => {
+        setSpecCache((prev) => ({ ...prev, ...batchResult }));
+      })
+      .catch((e: any) => message.error(e.message));
+  }, [menu.items]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePriceChange = async (itemId: number, price: number) => {
     try {

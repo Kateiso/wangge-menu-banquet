@@ -340,3 +340,24 @@ class TestBackwardCompatibility:
         }, headers=_auth_header(token))
         # Should not be 401 (auth passed); 500 is OK (LLM key may not work in test)
         assert res.status_code != 401
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 6. BATCH SPECS TESTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.fixture()
+def auth_headers(client):
+    token = _login(client, "admin", "wangge2026")
+    return _auth_header(token)
+
+
+def test_batch_specs_returns_dict_keyed_by_dish_id(client, auth_headers):
+    """GET /api/dishes/specs/batch?dish_ids=1,2 returns {dish_id: [specs]} mapping"""
+    res = client.get("/api/dishes/specs/batch?dish_ids=1,2", headers=auth_headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert isinstance(data, dict)
+    for key in data:
+        assert isinstance(data[key], list)

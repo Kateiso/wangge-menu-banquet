@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 from backend.models.dish import Dish
 from backend.models.user import User
@@ -131,6 +131,19 @@ def update_dish(
 
 
 # ── DishSpec 子端点 ──
+
+@router.get("/specs/batch")
+def api_batch_specs(
+    dish_ids: str = Query(..., description="逗号分隔的菜品ID，如 1,2,3"),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    ids = [int(x) for x in dish_ids.split(",") if x.strip().isdigit()]
+    result: dict[int, list] = {}
+    for did in ids:
+        result[did] = list_specs(session, did)
+    return result
+
 
 @router.get("/{dish_id}/specs", response_model=list[DishSpecResponse])
 def api_list_specs(
