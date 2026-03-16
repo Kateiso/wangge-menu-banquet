@@ -62,7 +62,7 @@ backend/
 │   └── schemas.py       # Pydantic request/response schemas
 ├── routers/
 │   ├── auth.py          # POST /api/auth/login, GET /api/auth/me
-│   ├── dish.py          # CRUD /api/dishes + /api/dishes/{id}/specs
+│   ├── dish.py          # CRUD /api/dishes + /api/dishes/{id}/specs + /api/dishes/specs/batch
 │   ├── menu.py          # 菜单CRUD、从套餐创建、编辑、定价切换、Excel导出
 │   └── package.py       # 套餐分组+套餐CRUD、AI创建套餐
 └── services/
@@ -97,6 +97,7 @@ POST       /api/menu/generate            # 旧AI生成(保留)
 # 菜品
 GET/POST   /api/dishes                   # 菜品列表/新增
 GET/POST   /api/dishes/{id}/specs        # 菜品规格
+GET        /api/dishes/specs/batch?dish_ids=1,2,3  # 批量获取多菜品规格（菜单编辑器用，避免并发429）
 ```
 
 ### Frontend Structure
