@@ -43,6 +43,8 @@ def build_menu_from_package(
     if not package:
         raise ValueError("套餐不存在")
 
+    effective_pricing_mode = pricing_mode or package.default_pricing_mode or "additive"
+
     # 加载套餐菜品
     pkg_items = list(session.exec(
         select(PackageItem)
@@ -55,9 +57,9 @@ def build_menu_from_package(
         mode='package',
         party_size=party_size,
         date=date,
-        pricing_mode=pricing_mode,
+        pricing_mode=effective_pricing_mode,
         table_count=table_count,
-        fixed_price=package.base_price if pricing_mode == 'fixed' else 0.0,
+        fixed_price=package.base_price,
     )
 
     menu_items: list[MenuItem] = []
@@ -107,9 +109,8 @@ def build_menu_from_package(
         total_cost += cost_total
 
     # 定价模式
-    if pricing_mode == 'fixed':
+    if effective_pricing_mode == 'fixed':
         menu.total_price = package.base_price * table_count
-        menu.fixed_price = package.base_price
     else:
         menu.total_price = round(total_price, 2)
 

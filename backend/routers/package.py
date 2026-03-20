@@ -65,7 +65,10 @@ def api_delete_group(
     try:
         delete_group(session, group_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        detail = str(e)
+        if detail == "分组下仍有套餐，请先清空后再删除":
+            raise HTTPException(status_code=400, detail=detail)
+        raise HTTPException(status_code=404, detail=detail)
 
 
 # ── Package ──

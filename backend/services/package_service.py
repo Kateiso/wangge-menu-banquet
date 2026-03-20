@@ -72,15 +72,15 @@ def delete_group(session: Session, group_id: int) -> None:
     group = session.get(PackageGroup, group_id)
     if not group:
         raise ValueError("分组不存在")
+
+    active_packages = list(session.exec(
+        select(Package).where(Package.group_id == group_id, Package.is_active == True)
+    ).all())
+    if active_packages:
+        raise ValueError("分组下仍有套餐，请先清空后再删除")
+
     group.is_active = False
     session.add(group)
-    # 软删除分组下的套餐
-    packages = list(session.exec(
-        select(Package).where(Package.group_id == group_id)
-    ).all())
-    for p in packages:
-        p.is_active = False
-        session.add(p)
     session.commit()
 
 

@@ -11,6 +11,11 @@ function headers(): Record<string, string> {
   };
 }
 
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  const err = await res.json().catch(() => ({ detail: fallback }));
+  return err.detail || fallback;
+}
+
 export interface User {
   username: string;
   role: string;
@@ -214,7 +219,7 @@ export async function createPackageGroup(name: string, sort_order: number = 0): 
     headers: headers(),
     body: JSON.stringify({ name, sort_order }),
   });
-  if (!res.ok) throw new Error("创建分组失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, '创建分组失败'));
   return res.json();
 }
 
@@ -224,7 +229,7 @@ export async function updatePackageGroup(id: number, data: { name?: string; sort
     headers: headers(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("更新分组失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, '更新分组失败'));
   return res.json();
 }
 
@@ -233,7 +238,7 @@ export async function deletePackageGroup(id: number): Promise<void> {
     method: 'DELETE',
     headers: headers(),
   });
-  if (!res.ok) throw new Error("删除分组失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, '删除分组失败'));
 }
 
 export async function getPackageDetail(id: number): Promise<PackageDetail> {
@@ -255,7 +260,7 @@ export async function createPackage(data: {
     headers: headers(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("创建套餐失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, '创建套餐失败'));
   return res.json();
 }
 
@@ -265,7 +270,7 @@ export async function updatePackage(id: number, data: Partial<PackageSummary & {
     headers: headers(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("更新套餐失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, '更新套餐失败'));
   return res.json();
 }
 
@@ -274,7 +279,7 @@ export async function deletePackage(id: number): Promise<void> {
     method: 'DELETE',
     headers: headers(),
   });
-  if (!res.ok) throw new Error("删除套餐失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, '删除套餐失败'));
 }
 
 export async function addPackageItem(packageId: number, data: { dish_id: number; default_spec_id?: number; default_quantity?: number; sort_order?: number }): Promise<{ id: number }> {
