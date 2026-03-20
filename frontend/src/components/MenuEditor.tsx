@@ -14,7 +14,7 @@ import {
 import type { MenuData, MenuItemData, User, Dish, DishSpec } from '../api/menuApi';
 import MenuAdjustChat from './MenuAdjustChat';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 const CATEGORY_ORDER = ['凉菜', '热菜', '汤羹', '主食', '甜品', '点心'];
 
