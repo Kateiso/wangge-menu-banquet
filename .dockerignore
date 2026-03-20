@@ -5,5 +5,6 @@ __pycache__
 *.pyc
 *.db
 *.sqlite
+!menu.db
 .DS_Store
 plan.md
