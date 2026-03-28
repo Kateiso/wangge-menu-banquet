@@ -43,4 +43,5 @@ class MenuItem(SQLModel, table=True):
     reason: str = ''
     spec_id: int | None = None
     spec_name: str = ''
+    additive_price: float = 0.0
     adjusted_price: float = 0.0

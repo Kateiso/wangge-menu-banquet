@@ -15,6 +15,7 @@ from backend.models.schemas import (
 from backend.services.menu_engine import generate_menu
 from backend.services.excel_generator import generate_excel, generate_margin_excel
 from backend.services.adjustment_engine import analyze_adjustment_intent, execute_adjustment
+from backend.services.menu_pricing import apply_actual_price, current_actual_price, recalculate_menu_values
 from backend.services.spec_matcher import build_menu_from_package, match_spec
 from backend.database import get_session
 from backend.auth_utils import get_current_user
@@ -59,6 +60,7 @@ def _build_menu_response(menu: Menu, items: list[MenuItem], role: str = "admin")
                 reason=item.reason,
                 spec_id=getattr(item, 'spec_id', None),
                 spec_name=getattr(item, 'spec_name', ''),
+                additive_price=getattr(item, 'additive_price', 0.0),
                 adjusted_price=getattr(item, 'adjusted_price', 0.0),
             )
             for item in items
@@ -140,18 +142,24 @@ def api_update_menu_item(
             item.spec_name = spec.spec_name
             item.price = spec.price
             item.cost = spec.cost
-            item.adjusted_price = spec.price
+            item.price_text = spec.price_text or item.price_text
+            item.additive_price = spec.price
+            if getattr(session.get(Menu, menu_id), 'pricing_mode', 'additive') != 'fixed':
+                item.adjusted_price = spec.price
 
     if data.adjusted_price is not None:
+        menu = session.get(Menu, menu_id)
+        if menu and getattr(menu, 'pricing_mode', 'additive') == 'fixed':
+            raise HTTPException(status_code=400, detail="固定价模式下请调整固定价，不支持直接改单项售价")
+        item.additive_price = data.adjusted_price
         item.adjusted_price = data.adjusted_price
 
     if data.quantity is not None:
         item.quantity = max(1, data.quantity)
 
-    # 重算小计
-    effective_price = item.adjusted_price if item.adjusted_price > 0 else item.price
-    item.subtotal = round(effective_price * item.quantity, 2)
-    item.cost_total = round(item.cost * item.quantity, 2)
+    if item.additive_price <= 0:
+        item.additive_price = item.price
+    _apply_actual_price(item, _current_actual_price(item))
 
     session.add(item)
     session.flush()
@@ -177,6 +185,7 @@ def api_update_menu_item(
         reason=item.reason,
         spec_id=item.spec_id,
         spec_name=item.spec_name,
+        additive_price=item.additive_price,
         adjusted_price=item.adjusted_price,
     )
 
@@ -233,6 +242,7 @@ def api_add_menu_item(
         category=dish.category,
         spec_id=spec_id,
         spec_name=spec_name,
+        additive_price=item_price,
         adjusted_price=item_price,
     )
     session.add(item)
@@ -257,6 +267,7 @@ def api_add_menu_item(
         category=item.category,
         spec_id=item.spec_id,
         spec_name=item.spec_name,
+        additive_price=item.additive_price,
         adjusted_price=item.adjusted_price,
     )
 
@@ -383,22 +394,5 @@ def _recalculate_menu(session: Session, menu_id: str) -> None:
         select(MenuItem).where(MenuItem.menu_id == menu_id)
     ).all())
 
-    total_cost = sum(item.cost_total for item in items)
-    table_count = max(1, getattr(menu, 'table_count', 1))
-
-    if getattr(menu, 'pricing_mode', 'additive') == 'fixed' and getattr(menu, 'fixed_price', 0) > 0:
-        per_table = menu.fixed_price
-        menu.total_price = round(per_table * table_count, 2)
-    else:
-        total_price = sum(item.subtotal for item in items)
-        menu.total_price = round(total_price, 2)
-
-    menu.total_cost = round(total_cost, 2)
-    per_table_price = menu.total_price / table_count if table_count > 0 else menu.total_price
-    per_table_cost = menu.total_cost / table_count if table_count > 0 else menu.total_cost
-    menu.margin_rate = round(
-        (per_table_price - per_table_cost) / per_table_price * 100, 1
-    ) if per_table_price > 0 else 0.0
-    menu.budget = menu.total_price
-
+    recalculate_menu_values(menu, items)
     session.add(menu)

@@ -78,6 +78,7 @@ class PackageItemCreate(BaseModel):
     dish_id: int
     default_spec_id: Optional[int] = None
     default_quantity: int = 1
+    override_price: Optional[float] = None
     sort_order: int = 0
 
 
@@ -92,8 +93,16 @@ class PackageItemDetail(BaseModel):
     default_spec_id: Optional[int] = None
     default_spec_name: str = ""
     default_quantity: int
+    override_price: Optional[float] = None
     sort_order: int
     specs: List[DishSpecResponse] = []
+
+
+class PackageItemUpdate(BaseModel):
+    default_spec_id: Optional[int] = None
+    default_quantity: Optional[int] = None
+    override_price: Optional[float] = None
+    sort_order: Optional[int] = None
 
 
 class PackageCreate(BaseModel):
@@ -170,6 +179,7 @@ class MenuItemResponse(BaseModel):
     reason: Optional[str] = None
     spec_id: Optional[int] = None
     spec_name: str = ''
+    additive_price: float = 0.0
     adjusted_price: float = 0.0
 
 

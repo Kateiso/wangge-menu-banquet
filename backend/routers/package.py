@@ -6,13 +6,13 @@ from backend.models.user import User
 from backend.models.schemas import (
     PackageGroupCreate, PackageGroupUpdate, PackageGroupResponse,
     PackageCreate, PackageUpdate, PackageDetail,
-    PackageItemCreate, PackageItemReorder,
+    PackageItemCreate, PackageItemUpdate, PackageItemReorder,
     AIPackageCreateRequest,
 )
 from backend.services.package_service import (
     list_groups_with_packages, create_group, update_group, delete_group,
     get_package_detail, create_package, update_package, delete_package,
-    add_package_item, remove_package_item, reorder_package_items,
+    add_package_item, update_package_item, remove_package_item, reorder_package_items,
 )
 
 router = APIRouter(
@@ -141,10 +141,26 @@ def api_add_item(
             dish_id=data.dish_id,
             default_spec_id=data.default_spec_id,
             default_quantity=data.default_quantity,
+            override_price=data.override_price,
             sort_order=data.sort_order,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    return {"id": pi.id}
+
+
+@router.put("/items/{item_id}", status_code=200)
+def api_update_item(
+    item_id: int,
+    data: PackageItemUpdate,
+    session: Session = Depends(get_session),
+):
+    try:
+        pi = update_package_item(session, item_id, data)
+    except ValueError as e:
+        detail = str(e)
+        status_code = 400 if detail == "默认规格不存在" else 404
+        raise HTTPException(status_code=status_code, detail=detail)
     return {"id": pi.id}
 
 

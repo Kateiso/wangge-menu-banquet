@@ -17,6 +17,7 @@ from backend.models.package import PackageGroup, Package, PackageItem  # noqa: F
 from backend.models.conversation import MenuConversation  # noqa: F401
 from backend.models.user import User, create_default_users  # noqa: F401
 from backend.services.dish_service import import_dishes_from_csv
+from backend.db_migrations import run_sqlite_compat_migrations
 from backend.routers.menu import router as menu_router
 from backend.routers.auth import router as auth_router
 from backend.routers.dish import router as dish_router
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # 启动时创建表并导入 CSV + 初始化用户
     SQLModel.metadata.create_all(engine)
+    run_sqlite_compat_migrations(engine)
 
     with Session(engine) as session:
         count = import_dishes_from_csv(session)

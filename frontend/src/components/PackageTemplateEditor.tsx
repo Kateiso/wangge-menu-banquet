@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import {
   Input, InputNumber, Button, Table, Space, message, Popconfirm,
-  Form, Modal, Tag, Typography, Divider, Spin,
+  Form, Modal, Tag, Typography, Divider, Spin, Select,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons';
 import {
-  getPackageDetail, updatePackage, addPackageItem, removePackageItem,
+  getPackageDetail, updatePackage, addPackageItem, updatePackageItem, removePackageItem,
   getDishes,
 } from '../api/menuApi';
 import type { PackageDetail, PackageItemDetail, Dish, User } from '../api/menuApi';
@@ -24,6 +24,10 @@ export default function PackageTemplateEditor({ packageId, user }: Props) {
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [editBasePrice, setEditBasePrice] = useState(0);
+  const [editingItem, setEditingItem] = useState<PackageItemDetail | null>(null);
+  const [itemModalOpen, setItemModalOpen] = useState(false);
+  const [itemSaving, setItemSaving] = useState(false);
+  const [itemForm] = Form.useForm();
 
   // 添加菜品
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -95,6 +99,44 @@ export default function PackageTemplateEditor({ packageId, user }: Props) {
     }
   };
 
+  const openItemModal = (item: PackageItemDetail) => {
+    setEditingItem(item);
+    itemForm.setFieldsValue({
+      default_spec_id: item.default_spec_id ?? undefined,
+      default_quantity: item.default_quantity,
+      override_price: item.override_price ?? undefined,
+    });
+    setItemModalOpen(true);
+  };
+
+  const closeItemModal = () => {
+    setItemModalOpen(false);
+    setEditingItem(null);
+    itemForm.resetFields();
+  };
+
+  const handleSaveItem = async () => {
+    if (!editingItem) return;
+
+    try {
+      const values = await itemForm.validateFields();
+      setItemSaving(true);
+      await updatePackageItem(editingItem.id, {
+        default_spec_id: values.default_spec_id ?? null,
+        default_quantity: values.default_quantity,
+        override_price: values.override_price ?? null,
+      });
+      message.success('套餐项已更新');
+      closeItemModal();
+      fetchDetail();
+    } catch (e: any) {
+      if (e?.errorFields) return;
+      message.error(e.message || '保存失败');
+    } finally {
+      setItemSaving(false);
+    }
+  };
+
   const isAdmin = user.role === 'admin';
 
   const columns = [
@@ -110,9 +152,9 @@ export default function PackageTemplateEditor({ packageId, user }: Props) {
       ),
     },
     {
-      title: '规格',
+      title: '默认规格',
       dataIndex: 'default_spec_name',
-      width: 80,
+      width: 120,
       render: (v: string) => v || '-',
     },
     {
@@ -122,24 +164,37 @@ export default function PackageTemplateEditor({ packageId, user }: Props) {
       align: 'center' as const,
     },
     {
-      title: '售价',
+      title: '覆盖价',
+      dataIndex: 'override_price',
+      width: 100,
+      render: (v: number | null) => (
+        v !== null && v !== undefined ? <Tag color="gold">¥{v}</Tag> : <Text type="secondary">-</Text>
+      ),
+    },
+    {
+      title: '生效售价',
       dataIndex: 'price',
-      width: 80,
-      render: (v: number) => `¥${v}`,
+      width: 100,
+      render: (v: number) => <Text strong>¥{v}</Text>,
     },
     ...(isAdmin ? [{
-      title: '成本',
+      title: '生效成本',
       dataIndex: 'cost',
-      width: 80,
+      width: 100,
       render: (v: number) => <Text type="warning">¥{v}</Text>,
     }] : []),
     {
       title: '操作',
-      width: 60,
+      width: 120,
       render: (_: any, record: PackageItemDetail) => (
-        <Popconfirm title="确认移除？" onConfirm={() => handleRemoveItem(record.id)}>
-          <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-        </Popconfirm>
+        <Space size={4}>
+          <Button type="link" size="small" onClick={() => openItemModal(record)}>
+            编辑
+          </Button>
+          <Popconfirm title="确认移除？" onConfirm={() => handleRemoveItem(record.id)}>
+            <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -176,6 +231,12 @@ export default function PackageTemplateEditor({ packageId, user }: Props) {
       </Form>
 
       <Divider />
+
+      <div style={{ marginBottom: 12 }}>
+        <Text type="secondary">
+          套餐项的“生效售价”由默认规格、覆盖价和菜品原价共同决定，覆盖价只影响当前套餐。
+        </Text>
+      </div>
 
       {/* 菜品列表 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -233,6 +294,47 @@ export default function PackageTemplateEditor({ packageId, user }: Props) {
             ))}
           </div>
         </Spin>
+      </Modal>
+
+      <Modal
+        title={editingItem ? `编辑套餐项：${editingItem.dish_name}` : '编辑套餐项'}
+        open={itemModalOpen}
+        onOk={handleSaveItem}
+        onCancel={closeItemModal}
+        confirmLoading={itemSaving}
+        okText="保存"
+        cancelText="取消"
+      >
+        {editingItem && (
+          <Form form={itemForm} layout="vertical">
+            <Form.Item label="菜品">
+              <Input value={editingItem.dish_name} disabled />
+            </Form.Item>
+            <Form.Item label="默认规格" name="default_spec_id">
+              <Select
+                allowClear
+                placeholder={editingItem.specs.length > 0 ? '选择规格' : '暂无可选规格'}
+                disabled={editingItem.specs.length === 0}
+                options={editingItem.specs.map((spec) => ({
+                  value: spec.id,
+                  label: `${spec.spec_name} ¥${spec.price}`,
+                }))}
+              />
+            </Form.Item>
+            <Form.Item label="数量" name="default_quantity" rules={[{ required: true, message: '请输入数量' }]}>
+              <InputNumber min={1} precision={0} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item label="套餐内售价覆盖" name="override_price">
+              <InputNumber min={0} precision={2} style={{ width: '100%' }} addonAfter="元/份" />
+            </Form.Item>
+            <div style={{ padding: 12, borderRadius: 12, background: '#fafafa' }}>
+              <Space direction="vertical" size={4}>
+                <Text strong>当前生效售价：¥{editingItem.price}</Text>
+                {isAdmin && <Text type="warning">当前生效成本：¥{editingItem.cost}</Text>}
+              </Space>
+            </div>
+          </Form>
+        )}
       </Modal>
     </div>
   );

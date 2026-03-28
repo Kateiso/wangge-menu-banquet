@@ -189,6 +189,7 @@ export interface PackageItemDetail {
   default_spec_id: number | null;
   default_spec_name: string;
   default_quantity: number;
+  override_price: number | null;
   sort_order: number;
   specs: DishSpec[];
 }
@@ -253,7 +254,7 @@ export async function createPackage(data: {
   description?: string;
   base_price?: number;
   default_pricing_mode?: string;
-  items?: { dish_id: number; default_spec_id?: number; default_quantity?: number; sort_order?: number }[];
+  items?: { dish_id: number; default_spec_id?: number; default_quantity?: number; override_price?: number | null; sort_order?: number }[];
 }): Promise<{ id: number; name: string }> {
   const res = await fetch(`${BASE}/api/packages`, {
     method: 'POST',
@@ -282,13 +283,28 @@ export async function deletePackage(id: number): Promise<void> {
   if (!res.ok) throw new Error(await readErrorMessage(res, '删除套餐失败'));
 }
 
-export async function addPackageItem(packageId: number, data: { dish_id: number; default_spec_id?: number; default_quantity?: number; sort_order?: number }): Promise<{ id: number }> {
+export async function addPackageItem(packageId: number, data: { dish_id: number; default_spec_id?: number | null; default_quantity?: number; override_price?: number | null; sort_order?: number }): Promise<{ id: number }> {
   const res = await fetch(`${BASE}/api/packages/${packageId}/items`, {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("添加菜品失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, '添加菜品失败'));
+  return res.json();
+}
+
+export async function updatePackageItem(itemId: number, data: {
+  default_spec_id?: number | null;
+  default_quantity?: number;
+  override_price?: number | null;
+  sort_order?: number;
+}): Promise<{ id: number }> {
+  const res = await fetch(`${BASE}/api/packages/items/${itemId}`, {
+    method: 'PUT',
+    headers: headers(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(await readErrorMessage(res, '更新套餐菜品失败'));
   return res.json();
 }
 
@@ -330,6 +346,7 @@ export interface MenuItemData {
   reason: string;
   spec_id?: number | null;
   spec_name?: string;
+  additive_price?: number;
   adjusted_price?: number;
 }
 
@@ -422,7 +439,7 @@ export async function updateMenuItem(menuId: string, itemId: number, data: {
     headers: headers(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("更新菜单项失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, '更新菜单项失败'));
   return res.json();
 }
 
@@ -436,7 +453,7 @@ export async function addMenuItem(menuId: string, data: {
     headers: headers(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("添加菜品失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, '添加菜品失败'));
   return res.json();
 }
 
@@ -445,7 +462,7 @@ export async function removeMenuItem(menuId: string, itemId: number): Promise<vo
     method: 'DELETE',
     headers: headers(),
   });
-  if (!res.ok) throw new Error("删除菜品失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, '删除菜品失败'));
 }
 
 export async function updateMenuPricing(menuId: string, data: {
@@ -457,7 +474,7 @@ export async function updateMenuPricing(menuId: string, data: {
     headers: headers(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("更新定价模式失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, '更新定价模式失败'));
   return res.json();
 }
 

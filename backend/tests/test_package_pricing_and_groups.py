@@ -152,6 +152,70 @@ def test_switch_pricing_mode_uses_inherited_fixed_price(client: TestClient):
     assert additive_data["pricing_mode"] == "additive"
     assert additive_data["fixed_price"] == 888.0
     assert additive_data["total_price"] == 204.0
+    assert [item["subtotal"] for item in additive_data["items"]] == [128.0, 76.0]
+
+
+def test_fixed_mode_distribution_persists_item_prices(client: TestClient):
+    token = _login(client)
+    ids = _create_group_with_package()
+
+    created = client.post(
+        "/api/menu/from-package",
+        json={
+            "customer_name": "李先生",
+            "date": "2026-03-20",
+            "party_size": 10,
+            "table_count": 2,
+            "package_id": ids["package_id"],
+            "pricing_mode": "fixed",
+        },
+        headers=_auth_header(token),
+    )
+    assert created.status_code == 200
+    data = created.json()
+    assert data["total_price"] == 1776.0
+    assert sum(item["subtotal"] for item in data["items"]) == 888.0
+    assert data["items"][0]["adjusted_price"] == 557.18
+    assert data["items"][0]["subtotal"] == 557.18
+    assert data["items"][1]["adjusted_price"] == 165.41
+    assert data["items"][1]["subtotal"] == 330.82
+
+
+def test_package_override_price_takes_priority_when_building_menu(client: TestClient):
+    token = _login(client)
+    ids = _create_group_with_package()
+
+    update_item = client.put(
+        "/api/packages/items/1",
+        json={"override_price": 200.0},
+        headers=_auth_header(token),
+    )
+    assert update_item.status_code == 200
+
+    detail = client.get(f"/api/packages/{ids['package_id']}", headers=_auth_header(token))
+    assert detail.status_code == 200
+    detail_data = detail.json()
+    assert detail_data["items"][0]["override_price"] == 200.0
+    assert detail_data["items"][0]["price"] == 200.0
+
+    created = client.post(
+        "/api/menu/from-package",
+        json={
+            "customer_name": "周先生",
+            "date": "2026-03-20",
+            "party_size": 10,
+            "table_count": 1,
+            "package_id": ids["package_id"],
+            "pricing_mode": "additive",
+        },
+        headers=_auth_header(token),
+    )
+    assert created.status_code == 200
+    menu = created.json()
+    assert menu["total_price"] == 276.0
+    assert menu["items"][0]["additive_price"] == 200.0
+    assert menu["items"][0]["adjusted_price"] == 200.0
+    assert menu["items"][0]["price"] == 128.0
 
 
 def test_delete_group_only_allows_empty_group(client: TestClient):

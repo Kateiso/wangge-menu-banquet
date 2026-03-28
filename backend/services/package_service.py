@@ -4,7 +4,7 @@ from backend.models.dish_spec import DishSpec
 from backend.models.package import PackageGroup, Package, PackageItem
 from backend.models.schemas import (
     PackageGroupResponse, PackageSummary, PackageDetail, PackageItemDetail,
-    DishSpecResponse,
+    DishSpecResponse, PackageItemUpdate,
 )
 
 
@@ -111,23 +111,33 @@ def get_package_detail(session: Session, package_id: int) -> PackageDetail:
         ).all())
 
         default_spec_name = ""
+        effective_price = dish.price
+        effective_price_text = dish.price_text
+        effective_cost = dish.cost
         if pi.default_spec_id:
             for s in specs:
                 if s.id == pi.default_spec_id:
                     default_spec_name = s.spec_name
+                    effective_price = s.price
+                    effective_price_text = s.price_text
+                    effective_cost = s.cost
                     break
+
+        if pi.override_price is not None:
+            effective_price = pi.override_price
 
         items_detail.append(PackageItemDetail(
             id=pi.id,  # type: ignore
             dish_id=pi.dish_id,
             dish_name=dish.name,
             category=dish.category,
-            price=dish.price,
-            price_text=dish.price_text,
-            cost=dish.cost,
+            price=effective_price,
+            price_text=effective_price_text,
+            cost=effective_cost,
             default_spec_id=pi.default_spec_id,
             default_spec_name=default_spec_name,
             default_quantity=pi.default_quantity,
+            override_price=pi.override_price,
             sort_order=pi.sort_order,
             specs=[
                 DishSpecResponse(
@@ -183,6 +193,7 @@ def create_package(session: Session, group_id: int, name: str, description: str 
                 dish_id=item_data.dish_id,
                 default_spec_id=item_data.default_spec_id,
                 default_quantity=item_data.default_quantity,
+                override_price=item_data.override_price,
                 sort_order=item_data.sort_order or i,
             )
             session.add(pi)
@@ -221,21 +232,56 @@ def delete_package(session: Session, package_id: int) -> None:
 
 def add_package_item(session: Session, package_id: int, dish_id: int,
                      default_spec_id: int | None = None,
-                     default_quantity: int = 1, sort_order: int = 0) -> PackageItem:
+                     default_quantity: int = 1,
+                     override_price: float | None = None,
+                     sort_order: int = 0) -> PackageItem:
     package = session.get(Package, package_id)
     if not package:
         raise ValueError("套餐不存在")
+
+    dish = session.get(Dish, dish_id)
+    if not dish:
+        raise ValueError("菜品不存在")
+
+    if default_spec_id is not None:
+        spec = session.get(DishSpec, default_spec_id)
+        if not spec or spec.dish_id != dish_id or not spec.is_active:
+            raise ValueError("默认规格不存在")
 
     pi = PackageItem(
         package_id=package_id,
         dish_id=dish_id,
         default_spec_id=default_spec_id,
         default_quantity=default_quantity,
+        override_price=override_price,
         sort_order=sort_order,
     )
     session.add(pi)
     package.dish_count = _count_items(session, package_id) + 1
     session.add(package)
+    session.commit()
+    session.refresh(pi)
+    return pi
+
+
+def update_package_item(session: Session, item_id: int, data: PackageItemUpdate) -> PackageItem:
+    pi = session.get(PackageItem, item_id)
+    if not pi:
+        raise ValueError("套餐菜品不存在")
+
+    updates = data.model_dump(exclude_unset=True)
+    if "default_quantity" in updates and updates["default_quantity"] is not None:
+        updates["default_quantity"] = max(1, updates["default_quantity"])
+
+    if "default_spec_id" in updates and updates["default_spec_id"] is not None:
+        spec = session.get(DishSpec, updates["default_spec_id"])
+        if not spec or spec.dish_id != pi.dish_id or not spec.is_active:
+            raise ValueError("默认规格不存在")
+
+    for key, value in updates.items():
+        setattr(pi, key, value)
+
+    session.add(pi)
     session.commit()
     session.refresh(pi)
     return pi

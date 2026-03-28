@@ -3,6 +3,7 @@ from backend.models.dish import Dish
 from backend.models.dish_spec import DishSpec
 from backend.models.menu import Menu, MenuItem
 from backend.models.package import Package, PackageItem
+from backend.services.menu_pricing import apply_additive_baseline, recalculate_menu_values
 
 
 def match_spec(dish_id: int, party_size: int, session: Session) -> DishSpec | None:
@@ -63,67 +64,58 @@ def build_menu_from_package(
     )
 
     menu_items: list[MenuItem] = []
-    total_price = 0.0
-    total_cost = 0.0
-
     for pkg_item in pkg_items:
         dish = session.get(Dish, pkg_item.dish_id)
         if not dish or not dish.is_active:
             continue
 
-        # 匹配规格
-        spec = match_spec(dish.id, party_size, session)  # type: ignore
+        spec = None
+        if pkg_item.default_spec_id:
+            candidate_spec = session.get(DishSpec, pkg_item.default_spec_id)
+            if candidate_spec and candidate_spec.dish_id == dish.id and candidate_spec.is_active:
+                spec = candidate_spec
+
+        if spec is None:
+            spec = match_spec(dish.id, party_size, session)  # type: ignore
 
         if spec:
             item_price = spec.price
             item_cost = spec.cost
             spec_name = spec.spec_name
             spec_id = spec.id
+            price_text = spec.price_text or dish.price_text
         else:
             item_price = dish.price
             item_cost = dish.cost
             spec_name = ""
             spec_id = None
+            price_text = dish.price_text
+
+        additive_price = pkg_item.override_price if pkg_item.override_price is not None else item_price
 
         quantity = pkg_item.default_quantity
-        subtotal = round(item_price * quantity, 2)
         cost_total = round(item_cost * quantity, 2)
 
         mi = MenuItem(
             dish_id=dish.id,  # type: ignore
             dish_name=dish.name,
-            price_text=dish.price_text,
+            price_text=price_text,
             price=item_price,
             min_price=dish.min_price,
             cost=item_cost,
             quantity=quantity,
-            subtotal=subtotal,
+            subtotal=0.0,
             cost_total=cost_total,
             category=dish.category,
             spec_id=spec_id,
             spec_name=spec_name,
-            adjusted_price=item_price,
+            additive_price=0.0,
+            adjusted_price=0.0,
         )
+        apply_additive_baseline(mi, additive_price)
         menu_items.append(mi)
-        total_price += subtotal
-        total_cost += cost_total
 
-    # 定价模式
-    if effective_pricing_mode == 'fixed':
-        menu.total_price = package.base_price * table_count
-    else:
-        menu.total_price = round(total_price, 2)
-
-    menu.total_cost = round(total_cost, 2)
-    menu.budget = menu.total_price
-
-    if menu.total_price > 0:
-        menu.margin_rate = round(
-            (menu.total_price / table_count - menu.total_cost / table_count)
-            / (menu.total_price / table_count) * 100, 1
-        )
-    else:
-        menu.margin_rate = 0.0
+    recalculate_menu_values(menu, menu_items)
 
     # 保存
     session.add(menu)

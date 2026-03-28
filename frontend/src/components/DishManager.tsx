@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import {
-  getDishes, updateDish, createDish, getDishSpecs, createDishSpec,
+  getDishes, updateDish, createDish, getDishSpecs, getBatchDishSpecs, createDishSpec,
   updateDishSpec, deleteDishSpec,
 } from '../api/menuApi';
 import type { Dish, User, DishCreateData, DishSpec } from '../api/menuApi';
@@ -49,6 +49,28 @@ const DishManager = ({ user }: DishManagerProps) => {
 
   useEffect(() => { fetchDishes(); }, []);
 
+  useEffect(() => {
+    const dishIds = dishes.map((dish) => dish.id).filter((id) => specCache[id] === undefined);
+    if (dishIds.length === 0) return;
+
+    const syncSpecs = async () => {
+      try {
+        const batches: number[][] = [];
+        const chunkSize = 40;
+        for (let i = 0; i < dishIds.length; i += chunkSize) {
+          batches.push(dishIds.slice(i, i + chunkSize));
+        }
+        const results = await Promise.all(batches.map((ids) => getBatchDishSpecs(ids)));
+        const merged = results.reduce((acc, cur) => ({ ...acc, ...cur }), {});
+        setSpecCache((prev) => ({ ...prev, ...merged }));
+      } catch (e: any) {
+        message.error(e.message || '加载规格失败');
+      }
+    };
+
+    void syncSpecs();
+  }, [dishes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const filteredDishes = useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase();
     return dishes.filter((dish) => {
@@ -60,12 +82,13 @@ const DishManager = ({ user }: DishManagerProps) => {
 
   const openEditModal = (dish: Dish) => {
     setEditingDish(dish);
+    const hasSpecs = (specCache[dish.id]?.length || 0) > 0;
     form.setFieldsValue({
       name: dish.name,
       category: dish.category,
-      price: dish.price,
-      cost: dish.cost,
-      price_text: dish.price_text,
+      price: hasSpecs ? undefined : dish.price,
+      cost: hasSpecs ? undefined : dish.cost,
+      price_text: hasSpecs ? undefined : dish.price_text,
     });
     setIsModalOpen(true);
   };
@@ -92,7 +115,11 @@ const DishManager = ({ user }: DishManagerProps) => {
     try {
       const values = await form.validateFields();
       if (editingDish) {
-        await updateDish(editingDish.id, values);
+        const hasSpecs = (specCache[editingDish.id]?.length || 0) > 0;
+        await updateDish(editingDish.id, hasSpecs ? {
+          name: values.name,
+          category: values.category,
+        } : values);
         message.success("更新成功");
       } else {
         const payload: DishCreateData = {
@@ -121,6 +148,13 @@ const DishManager = ({ user }: DishManagerProps) => {
     } catch (e: any) {
       message.error(e.message);
     }
+  };
+
+  const getDishSpecsList = (dishId: number) => specCache[dishId] || [];
+  const hasDishSpecs = (dishId: number) => getDishSpecsList(dishId).length > 0;
+  const getSummarySpec = (dishId: number) => {
+    const specs = getDishSpecsList(dishId);
+    return specs.find((spec) => spec.is_default) || specs[0] || null;
   };
 
   const openSpecModal = (dishId: number, spec?: DishSpec) => {
@@ -226,38 +260,76 @@ const DishManager = ({ user }: DishManagerProps) => {
 
   const columns = [
     { title: 'ID', dataIndex: 'id', width: 60, align: 'center' as const },
-    { title: '菜名', dataIndex: 'name', width: 150 },
-    { title: '分类', dataIndex: 'category', width: 80 },
-    { title: '售价描述', dataIndex: 'price_text', width: 120 },
     {
-      title: '售价(¥)',
+      title: '菜名',
+      dataIndex: 'name',
+      width: 180,
+      render: (name: string, record: Dish) => (
+        <Space size={6} wrap>
+          {hasDishSpecs(record.id) && <Tag color="blue">规格菜</Tag>}
+          <span>{name}</span>
+        </Space>
+      ),
+    },
+    { title: '分类', dataIndex: 'category', width: 80 },
+    { title: '售价摘要', dataIndex: 'price_text', width: 160, render: (_: string, record: Dish) => {
+      if (!hasDishSpecs(record.id)) {
+        return <Text>¥{record.price}</Text>;
+      }
+      const spec = getSummarySpec(record.id);
+      if (!spec) return <Text type="secondary">规格维护中</Text>;
+      return (
+        <Space size={6} wrap>
+          <Tag color="blue">默认规格价</Tag>
+          <Text>{spec.spec_name} ¥{spec.price}</Text>
+        </Space>
+      );
+    } },
+    {
+      title: '成本摘要',
       dataIndex: 'price',
       width: 100,
-      render: (price: number) => `¥${price}`
+      render: (_: number, record: Dish) => {
+        if (!hasDishSpecs(record.id)) {
+          return <Text>¥{record.cost}</Text>;
+        }
+        const spec = getSummarySpec(record.id);
+        if (!spec) return <Text type="secondary">规格维护中</Text>;
+        return (
+          <Space size={6} wrap>
+            <Tag color="gold">默认规格成本</Tag>
+            <Text>¥{spec.cost}</Text>
+          </Space>
+        );
+      }
     },
     {
-      title: '成本(¥)',
+      title: '毛利摘要',
       dataIndex: 'cost',
       width: 100,
-      render: (cost: number) => (
-        isAdmin ? <span style={{ color: '#faad14', fontWeight: 'bold' }}>¥{cost}</span> : '***'
-      )
-    },
-    {
-      title: '毛利率',
-      width: 100,
-      render: (_: any, record: Dish) => {
+      render: (_: number, record: Dish) => {
         if (!isAdmin) return '***';
-        const margin = ((record.price - record.cost) / record.price * 100).toFixed(1);
-        return `${margin}%`;
+        if (!hasDishSpecs(record.id)) {
+          const margin = record.price > 0 ? ((record.price - record.cost) / record.price * 100).toFixed(1) : '0.0';
+          return <Text>{margin}%</Text>;
+        }
+        const spec = getSummarySpec(record.id);
+        if (!spec || spec.price <= 0) return <Text type="secondary">规格维护中</Text>;
+        const margin = ((spec.price - spec.cost) / spec.price * 100).toFixed(1);
+        return (
+          <Space size={6} wrap>
+            <Tag color="blue">默认规格</Tag>
+            <Text>{margin}%</Text>
+          </Space>
+        );
       }
     },
     {
       title: '操作',
-      width: 80,
-      render: (_: any, record: Dish) => (
-        isAdmin ? <Button size="small" type="link" onClick={() => openEditModal(record)}>编辑</Button> : '-'
-      )
+      width: 100,
+      render: (_: any, record: Dish) => {
+        return isAdmin ? <Button size="small" type="link" onClick={() => openEditModal(record)}>编辑</Button> : '-';
+      }
     }
   ];
 
@@ -290,6 +362,12 @@ const DishManager = ({ user }: DishManagerProps) => {
             </Button>
           )}
         </Space>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <Text type="secondary">
+          有规格的菜，外层仅显示摘要，价格和成本请到规格中维护。
+        </Text>
       </div>
 
       <Table
@@ -326,23 +404,34 @@ const DishManager = ({ user }: DishManagerProps) => {
           <Form.Item name="category" label="分类" rules={[{ required: true, message: '请选择分类' }]}>
             <Select options={categoryOptions.map((c) => ({ value: c, label: c }))} />
           </Form.Item>
-          <Form.Item name="price" label="售价 (¥)" rules={[{ required: true }]}>
-            <InputNumber style={{ width: '100%' }} precision={2} />
-          </Form.Item>
-          {isAdmin && editingDish && (
-            <Form.Item name="cost" label="成本 (¥)" rules={[{ required: true }]}>
-              <InputNumber style={{ width: '100%' }} precision={2} />
-            </Form.Item>
-          )}
-          {isAdmin && editingDish && (
-            <Form.Item name="price_text" label="价格描述 (如: 98元/例)" rules={[{ required: true, message: '请输入价格描述' }]}>
-              <Input />
-            </Form.Item>
-          )}
-          {!editingDish && (
-            <Form.Item name="price_text" label="价格描述 (如: 98元/例)" rules={[{ required: true, message: '请输入价格描述' }]}>
-              <Input />
-            </Form.Item>
+          {editingDish && hasDishSpecs(editingDish.id) ? (
+            <div style={{ padding: 12, borderRadius: 12, background: '#fafafa', marginBottom: 16 }}>
+              <Space direction="vertical" size={4}>
+                <Text strong>请在规格中维护价格、成本和价格描述</Text>
+                <Text type="secondary">该菜品已存在启用规格，主表仅保留基础信息。</Text>
+              </Space>
+            </div>
+          ) : (
+            <>
+              <Form.Item name="price" label="售价 (¥)" rules={[{ required: true }]}>
+                <InputNumber style={{ width: '100%' }} precision={2} />
+              </Form.Item>
+              {isAdmin && editingDish && (
+                <Form.Item name="cost" label="成本 (¥)" rules={[{ required: true }]}>
+                  <InputNumber style={{ width: '100%' }} precision={2} />
+                </Form.Item>
+              )}
+              {isAdmin && editingDish && (
+                <Form.Item name="price_text" label="价格描述 (如: 98元/例)" rules={[{ required: true, message: '请输入价格描述' }]}>
+                  <Input />
+                </Form.Item>
+              )}
+              {!editingDish && (
+                <Form.Item name="price_text" label="价格描述 (如: 98元/例)" rules={[{ required: true, message: '请输入价格描述' }]}>
+                  <Input />
+                </Form.Item>
+              )}
+            </>
           )}
         </Form>
       </Modal>

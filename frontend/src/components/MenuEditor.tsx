@@ -34,6 +34,24 @@ export default function MenuEditor({ menu, user, onBack, onMenuUpdated }: Props)
   const [specCache, setSpecCache] = useState<Record<number, DishSpec[]>>({});
 
   const isAdmin = user.role === 'admin';
+  const isFixedMode = menu.pricing_mode === 'fixed';
+
+  const getCurrentPrice = (record: MenuItemData) => {
+    if (typeof record.adjusted_price === 'number' && record.adjusted_price > 0) {
+      return record.adjusted_price;
+    }
+    if (typeof record.additive_price === 'number' && record.additive_price > 0) {
+      return record.additive_price;
+    }
+    return record.price;
+  };
+
+  const getBaselinePrice = (record: MenuItemData) => {
+    if (typeof record.additive_price === 'number' && record.additive_price > 0) {
+      return record.additive_price;
+    }
+    return record.price;
+  };
 
   const sortedItems = useMemo(() => {
     return [...menu.items].sort((a, b) => {
@@ -66,6 +84,10 @@ export default function MenuEditor({ menu, user, onBack, onMenuUpdated }: Props)
 
   const handlePriceChange = async (itemId: number, price: number) => {
     try {
+      if (isFixedMode) {
+        message.warning('固定价模式下请修改固定价，不支持单项改价');
+        return;
+      }
       await updateMenuItem(menu.id, itemId, { adjusted_price: price });
       await refreshMenu();
     } catch (e: any) {
@@ -160,10 +182,10 @@ export default function MenuEditor({ menu, user, onBack, onMenuUpdated }: Props)
   });
 
   const tableCount = menu.table_count || 1;
-  const perTablePrice = menu.pricing_mode === 'fixed' && menu.fixed_price > 0
+  const perTablePrice = isFixedMode && menu.fixed_price > 0
     ? menu.fixed_price
     : (menu.total_price / tableCount);
-  const totalPrice = menu.pricing_mode === 'fixed' && menu.fixed_price > 0
+  const totalPrice = isFixedMode && menu.fixed_price > 0
     ? menu.fixed_price * tableCount
     : menu.total_price;
 
@@ -226,13 +248,33 @@ export default function MenuEditor({ menu, user, onBack, onMenuUpdated }: Props)
       title: '售价',
       width: 100,
       render: (_: any, record: MenuItemData) => {
-        const price = record.adjusted_price && record.adjusted_price > 0
-          ? record.adjusted_price
-          : record.price;
+        const currentPrice = getCurrentPrice(record);
+        const baselinePrice = getBaselinePrice(record);
+
+        if (isFixedMode) {
+          return (
+            <Space direction="vertical" size={0}>
+              <InputNumber
+                min={0}
+                value={currentPrice}
+                size="small"
+                disabled
+                style={{ width: 90 }}
+                precision={0}
+              />
+              {baselinePrice !== currentPrice && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  基线 ¥{baselinePrice}
+                </Text>
+              )}
+            </Space>
+          );
+        }
+
         return (
           <InputNumber
             min={0}
-            value={price}
+            value={currentPrice}
             size="small"
             onChange={(v) => v !== null && record.id && handlePriceChange(record.id, v)}
             style={{ width: 90 }}

@@ -330,6 +330,8 @@ def validate_and_build_menu(
             cost_total=cost_total,
             category=dish.category,
             reason=reason,
+            additive_price=dish.price,
+            adjusted_price=dish.price,
         )
         items.append(item)
         total_price += subtotal
@@ -443,6 +445,8 @@ def validate_and_build_banquet_menu(
             cost_total=cost_total,
             category=dish.category,
             reason=item_raw.get('reason', ''),
+            additive_price=dish.price,
+            adjusted_price=dish.price,
         )
         items.append(item)
 

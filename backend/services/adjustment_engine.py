@@ -6,6 +6,7 @@ from backend.models.menu import Menu, MenuItem
 from backend.models.conversation import MenuConversation
 from backend.models.schemas import AdjustResponse, AdjustmentAction
 from backend.services.menu_engine import get_client, build_dish_catalog, CATEGORY_ORDER, _apply_banquet_pricing
+from backend.services.menu_pricing import recalculate_menu_values
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +179,8 @@ def execute_adjustment(session: Session, menu_id: str, conversation_id: int) -> 
             cost_total=round(dish.cost * quantity, 2),
             category=dish.category,
             reason=reason,
+            additive_price=dish.price,
+            adjusted_price=dish.price,
         )
         session.add(new_item)
 
@@ -194,11 +197,7 @@ def execute_adjustment(session: Session, menu_id: str, conversation_id: int) -> 
         menu.total_cost = round(total_cost, 2)
         menu.margin_rate = round((actual_total - total_cost) / actual_total * 100, 1) if actual_total > 0 else 0
     else:
-        total_price = sum(item.subtotal for item in final_items)
-        total_cost = sum(item.cost_total for item in final_items)
-        menu.total_price = round(total_price, 2)
-        menu.total_cost = round(total_cost, 2)
-        menu.margin_rate = round((total_price - total_cost) / total_price * 100, 1) if total_price > 0 else 0
+        recalculate_menu_values(menu, final_items)
 
     # 记录确认
     confirm_msg = MenuConversation(

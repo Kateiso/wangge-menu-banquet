@@ -40,10 +40,14 @@ def setup_test_db():
     # Seed a few dishes for testing
     from backend.models.dish import Dish
     with Session(engine) as session:
-        session.add(Dish(id=1, name="白灼虾", price_text="128元/例", price=128.0, cost=48.64, category="热菜", is_active=True))
-        session.add(Dish(id=2, name="蒜蓉蒸扇贝", price_text="68元/例", price=68.0, cost=25.84, category="热菜", is_active=True))
-        session.add(Dish(id=3, name="皮蛋豆腐", price_text="38元/例", price=38.0, cost=10.64, category="凉菜", is_active=True))
-        session.add(Dish(id=4, name="杨枝甘露", price_text="28元/例", price=28.0, cost=8.96, category="甜品", is_active=False))
+        if not session.get(Dish, 1):
+            session.add(Dish(id=1, name="白灼虾", price_text="128元/例", price=128.0, cost=48.64, category="热菜", is_active=True))
+        if not session.get(Dish, 2):
+            session.add(Dish(id=2, name="蒜蓉蒸扇贝", price_text="68元/例", price=68.0, cost=25.84, category="热菜", is_active=True))
+        if not session.get(Dish, 3):
+            session.add(Dish(id=3, name="皮蛋豆腐", price_text="38元/例", price=38.0, cost=10.64, category="凉菜", is_active=True))
+        if not session.get(Dish, 4):
+            session.add(Dish(id=4, name="杨枝甘露", price_text="28元/例", price=28.0, cost=8.96, category="甜品", is_active=False))
         session.commit()
 
     yield engine
@@ -244,6 +248,33 @@ class TestDishUpdatePermissions:
         res = client.put("/api/dishes/1", json={"price": 138.0, "price_text": "138元/例"}, headers=_auth_header(token))
         assert res.status_code == 200
         assert res.json()["price"] == 138.0
+
+    def test_admin_cannot_update_price_or_cost_from_dish_when_active_specs_exist(self, client):
+        """When specs exist, price/cost must be maintained on spec rows only."""
+        token = _login(client, "admin", "wangge2026")
+        create_spec_res = client.post(
+            "/api/dishes/1/specs",
+            json={
+                "spec_name": "例牌",
+                "price": 128.0,
+                "price_text": "128元/例",
+                "cost": 48.64,
+                "min_people": 0,
+                "max_people": 0,
+                "is_default": True,
+                "sort_order": 0,
+            },
+            headers=_auth_header(token),
+        )
+        assert create_spec_res.status_code == 201
+
+        res = client.put(
+            "/api/dishes/1",
+            json={"cost": 55.0, "price": 138.0, "price_text": "138元/例"},
+            headers=_auth_header(token),
+        )
+        assert res.status_code == 400
+        assert res.json()["detail"] == "该菜品已有规格，请在规格中维护价格和成本"
 
     # ── Staff: can only toggle is_active ────────────────────────────────────
 

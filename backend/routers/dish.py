@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 from backend.models.dish import Dish
+from backend.models.dish_spec import DishSpec
 from backend.models.user import User
 from backend.database import get_session
 from backend.auth_utils import get_current_user, get_current_admin
@@ -114,11 +115,16 @@ def update_dish(
     # Permission checks
     restricted_fields = ["cost", "price", "price_text", "min_price"]
     update_data = updates.model_dump(exclude_unset=True)
+    has_active_specs = session.exec(
+        select(DishSpec).where(DishSpec.dish_id == dish.id, DishSpec.is_active == True)
+    ).first() is not None
 
     for field in restricted_fields:
         if field in update_data:
             if current_user.role != "admin":
                 raise HTTPException(status_code=403, detail="需要管理员权限才能修改价格或成本")
+            if has_active_specs:
+                raise HTTPException(status_code=400, detail="该菜品已有规格，请在规格中维护价格和成本")
 
     # Apply updates
     for key, value in update_data.items():

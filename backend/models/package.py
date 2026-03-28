@@ -27,4 +27,5 @@ class PackageItem(SQLModel, table=True):
     dish_id: int = Field(foreign_key="dish.id")
     default_spec_id: int | None = None
     default_quantity: int = 1
+    override_price: float | None = None
     sort_order: int = 0
