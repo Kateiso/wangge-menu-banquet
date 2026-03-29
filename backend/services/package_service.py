@@ -6,6 +6,7 @@ from backend.models.schemas import (
     PackageGroupResponse, PackageSummary, PackageDetail, PackageItemDetail,
     DishSpecResponse, PackageItemUpdate,
 )
+from backend.services.dish_service import get_default_spec
 
 
 # ── PackageGroup CRUD ──
@@ -110,18 +111,16 @@ def get_package_detail(session: Session, package_id: int) -> PackageDetail:
             .order_by(DishSpec.sort_order)
         ).all())
 
-        default_spec_name = ""
-        effective_price = dish.price
-        effective_price_text = dish.price_text
-        effective_cost = dish.cost
+        selected_spec = None
         if pi.default_spec_id:
-            for s in specs:
-                if s.id == pi.default_spec_id:
-                    default_spec_name = s.spec_name
-                    effective_price = s.price
-                    effective_price_text = s.price_text
-                    effective_cost = s.cost
-                    break
+            selected_spec = next((s for s in specs if s.id == pi.default_spec_id), None)
+        if selected_spec is None:
+            selected_spec = get_default_spec(session, pi.dish_id)
+
+        default_spec_name = selected_spec.spec_name if selected_spec else ""
+        effective_price = selected_spec.price if selected_spec else dish.price
+        effective_price_text = selected_spec.price_text if selected_spec else dish.price_text
+        effective_cost = selected_spec.cost if selected_spec else dish.cost
 
         if pi.override_price is not None:
             effective_price = pi.override_price
@@ -188,10 +187,14 @@ def create_package(session: Session, group_id: int, name: str, description: str 
 
     if items:
         for i, item_data in enumerate(items):
+            resolved_default_spec_id = item_data.default_spec_id
+            if resolved_default_spec_id is None:
+                default_spec = get_default_spec(session, item_data.dish_id)
+                resolved_default_spec_id = default_spec.id if default_spec else None
             pi = PackageItem(
                 package_id=package.id,  # type: ignore
                 dish_id=item_data.dish_id,
-                default_spec_id=item_data.default_spec_id,
+                default_spec_id=resolved_default_spec_id,
                 default_quantity=item_data.default_quantity,
                 override_price=item_data.override_price,
                 sort_order=item_data.sort_order or i,
@@ -247,6 +250,9 @@ def add_package_item(session: Session, package_id: int, dish_id: int,
         spec = session.get(DishSpec, default_spec_id)
         if not spec or spec.dish_id != dish_id or not spec.is_active:
             raise ValueError("默认规格不存在")
+    else:
+        default_spec = get_default_spec(session, dish_id)
+        default_spec_id = default_spec.id if default_spec else None
 
     pi = PackageItem(
         package_id=package_id,

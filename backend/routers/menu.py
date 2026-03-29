@@ -159,7 +159,7 @@ def api_update_menu_item(
 
     if item.additive_price <= 0:
         item.additive_price = item.price
-    _apply_actual_price(item, _current_actual_price(item))
+    apply_actual_price(item, current_actual_price(item))
 
     session.add(item)
     session.flush()
@@ -211,6 +211,7 @@ def api_add_menu_item(
     spec_name = ""
     item_price = dish.price
     item_cost = dish.cost
+    item_price_text = dish.price_text
 
     if spec_id:
         spec = session.get(DishSpec, spec_id)
@@ -218,6 +219,7 @@ def api_add_menu_item(
             item_price = spec.price
             item_cost = spec.cost
             spec_name = spec.spec_name
+            item_price_text = spec.price_text or dish.price_text
     else:
         # 自动匹配规格
         spec = match_spec(dish.id, menu.party_size, session)  # type: ignore
@@ -226,13 +228,14 @@ def api_add_menu_item(
             spec_name = spec.spec_name
             item_price = spec.price
             item_cost = spec.cost
+            item_price_text = spec.price_text or dish.price_text
 
     quantity = max(1, data.quantity)
     item = MenuItem(
         menu_id=menu_id,
         dish_id=dish.id,  # type: ignore
         dish_name=dish.name,
-        price_text=dish.price_text,
+        price_text=item_price_text,
         price=item_price,
         min_price=dish.min_price,
         cost=item_cost,

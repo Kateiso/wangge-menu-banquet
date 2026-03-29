@@ -46,13 +46,6 @@ export default function MenuEditor({ menu, user, onBack, onMenuUpdated }: Props)
     return record.price;
   };
 
-  const getBaselinePrice = (record: MenuItemData) => {
-    if (typeof record.additive_price === 'number' && record.additive_price > 0) {
-      return record.additive_price;
-    }
-    return record.price;
-  };
-
   const sortedItems = useMemo(() => {
     return [...menu.items].sort((a, b) => {
       const ai = CATEGORY_ORDER.indexOf(a.category);
@@ -202,7 +195,7 @@ export default function MenuEditor({ menu, user, onBack, onMenuUpdated }: Props)
       ),
     },
     {
-      title: '规格',
+      title: '使用规格',
       width: 180,
       render: (_: any, record: MenuItemData) => {
         const specs = specCache[record.dish_id] || [];
@@ -211,12 +204,12 @@ export default function MenuEditor({ menu, user, onBack, onMenuUpdated }: Props)
         return (
           <Select
             value={record.spec_id ?? undefined}
-            placeholder="选择规格"
+            placeholder="选择使用规格"
             size="small"
             style={{ width: 160 }}
             options={specs.map((spec) => ({
               value: spec.id,
-              label: `${spec.spec_name} ¥${spec.price}`,
+              label: spec.spec_name,
             }))}
             onChange={(value) => record.id && handleSpecChange(record.id, value)}
           />
@@ -249,25 +242,17 @@ export default function MenuEditor({ menu, user, onBack, onMenuUpdated }: Props)
       width: 100,
       render: (_: any, record: MenuItemData) => {
         const currentPrice = getCurrentPrice(record);
-        const baselinePrice = getBaselinePrice(record);
 
         if (isFixedMode) {
           return (
-            <Space direction="vertical" size={0}>
-              <InputNumber
-                min={0}
-                value={currentPrice}
-                size="small"
-                disabled
-                style={{ width: 90 }}
-                precision={0}
-              />
-              {baselinePrice !== currentPrice && (
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  基线 ¥{baselinePrice}
-                </Text>
-              )}
-            </Space>
+            <InputNumber
+              min={0}
+              value={currentPrice}
+              size="small"
+              disabled
+              style={{ width: 90 }}
+              precision={0}
+            />
           );
         }
 
@@ -445,7 +430,6 @@ export default function MenuEditor({ menu, user, onBack, onMenuUpdated }: Props)
                 <Space>
                   <Tag color={getCategoryColor(dish.category)}>{dish.category}</Tag>
                   <span>{dish.name}</span>
-                  <Text type="secondary">¥{dish.price}</Text>
                 </Space>
                 <Button size="small" type="link" onClick={() => handleAddDish(dish.id)}>
                   添加

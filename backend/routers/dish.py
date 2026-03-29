@@ -5,7 +5,15 @@ from backend.models.dish_spec import DishSpec
 from backend.models.user import User
 from backend.database import get_session
 from backend.auth_utils import get_current_user, get_current_admin
-from backend.services.dish_service import get_category_cost_ratio, list_specs, create_spec, update_spec, delete_spec
+from backend.services.dish_service import (
+    get_category_cost_ratio,
+    build_price_text,
+    calculate_min_price,
+    list_specs,
+    create_spec,
+    update_spec,
+    delete_spec,
+)
 from backend.models.schemas import DishSpecCreate, DishSpecUpdate, DishSpecResponse
 from typing import Optional
 from pydantic import BaseModel
@@ -14,23 +22,32 @@ router = APIRouter(prefix="/api/dishes", tags=["dishes"])
 require_admin = get_current_admin
 
 
+def _value_error_status(message: str) -> int:
+    return 404 if message in {"菜品不存在", "规格不存在"} else 400
+
+
 class DishCreate(BaseModel):
     name: str
     category: str
-    price: float
-    price_text: str
+    default_spec_name: str = "标准"
+    default_spec_price: Optional[float] = None
+    default_spec_cost: Optional[float] = None
+    default_spec_min_people: int = 0
+    default_spec_max_people: int = 0
     serving_unit: str = "例"
     serving_split: int = 0
     is_signature: bool = False
     is_must_order: bool = False
+    price: Optional[float] = None
+    price_text: Optional[str] = None
 
 
 class DishUpdate(BaseModel):
     name: Optional[str] = None
     price_text: Optional[str] = None
     price: Optional[float] = None
-    cost: Optional[float] = None  # Admin only
-    min_price: Optional[float] = None  # Admin only
+    cost: Optional[float] = None
+    min_price: Optional[float] = None
     category: Optional[str] = None
     is_active: Optional[bool] = None
     is_signature: Optional[bool] = None
@@ -63,23 +80,22 @@ def create_dish(
 ):
     name = dish.name.strip()
     category = dish.category.strip()
-    price_text = dish.price_text.strip()
     serving_unit = (dish.serving_unit or "例").strip() or "例"
+    default_spec_name = (dish.default_spec_name or "标准").strip() or "标准"
 
     if not name:
         raise HTTPException(status_code=400, detail="菜名不能为空")
     if not category:
         raise HTTPException(status_code=400, detail="分类不能为空")
-    if dish.price <= 0:
-        raise HTTPException(status_code=400, detail="价格必须大于0")
+    effective_price = dish.default_spec_price if dish.default_spec_price is not None else dish.price
+    if effective_price is None or effective_price <= 0:
+        raise HTTPException(status_code=400, detail="主规格价格必须大于0")
 
     ratio = get_category_cost_ratio(category)
-    price = round(float(dish.price), 2)
-    cost = round(price * ratio, 2)
-    min_price = round(cost * 1.3, 2)
-
-    if not price_text:
-        price_text = f"{price:.2f}元/{serving_unit}"
+    price = round(float(effective_price), 2)
+    cost = round(float(dish.default_spec_cost), 2) if dish.default_spec_cost is not None else round(price * ratio, 2)
+    min_price = calculate_min_price(cost)
+    price_text = (dish.price_text or build_price_text(price, serving_unit)).strip()
 
     db_dish = Dish(
         name=name,
@@ -96,6 +112,21 @@ def create_dish(
         is_active=True,
     )
     session.add(db_dish)
+    session.flush()
+
+    db_spec = DishSpec(
+        dish_id=db_dish.id,  # type: ignore[arg-type]
+        spec_name=default_spec_name,
+        price=price,
+        price_text=price_text,
+        cost=cost,
+        min_people=max(0, int(dish.default_spec_min_people)),
+        max_people=max(0, int(dish.default_spec_max_people)),
+        is_default=True,
+        sort_order=0,
+        is_active=True,
+    )
+    session.add(db_spec)
     session.commit()
     session.refresh(db_dish)
     return db_dish
@@ -115,16 +146,12 @@ def update_dish(
     # Permission checks
     restricted_fields = ["cost", "price", "price_text", "min_price"]
     update_data = updates.model_dump(exclude_unset=True)
-    has_active_specs = session.exec(
-        select(DishSpec).where(DishSpec.dish_id == dish.id, DishSpec.is_active == True)
-    ).first() is not None
 
     for field in restricted_fields:
         if field in update_data:
             if current_user.role != "admin":
                 raise HTTPException(status_code=403, detail="需要管理员权限才能修改价格或成本")
-            if has_active_specs:
-                raise HTTPException(status_code=400, detail="该菜品已有规格，请在规格中维护价格和成本")
+            raise HTTPException(status_code=400, detail="菜品价格和成本请在规格中维护")
 
     # Apply updates
     for key, value in update_data.items():
@@ -170,7 +197,7 @@ def api_create_spec(
     try:
         spec = create_spec(session, dish_id, **data.model_dump())
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=_value_error_status(str(e)), detail=str(e))
     return spec
 
 
@@ -184,7 +211,7 @@ def api_update_spec(
     try:
         spec = update_spec(session, spec_id, **data.model_dump(exclude_unset=True))
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=_value_error_status(str(e)), detail=str(e))
     return spec
 
 
@@ -197,4 +224,4 @@ def api_delete_spec(
     try:
         delete_spec(session, spec_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=_value_error_status(str(e)), detail=str(e))

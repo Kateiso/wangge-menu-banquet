@@ -152,7 +152,7 @@ export default function PackageTemplateEditor({ packageId, user }: Props) {
       ),
     },
     {
-      title: '默认规格',
+      title: '使用规格',
       dataIndex: 'default_spec_name',
       width: 120,
       render: (v: string) => v || '-',
@@ -164,7 +164,7 @@ export default function PackageTemplateEditor({ packageId, user }: Props) {
       align: 'center' as const,
     },
     {
-      title: '覆盖价',
+      title: '套餐售价覆盖',
       dataIndex: 'override_price',
       width: 100,
       render: (v: number | null) => (
@@ -172,13 +172,13 @@ export default function PackageTemplateEditor({ packageId, user }: Props) {
       ),
     },
     {
-      title: '生效售价',
+      title: '当前生效售价',
       dataIndex: 'price',
       width: 100,
       render: (v: number) => <Text strong>¥{v}</Text>,
     },
     ...(isAdmin ? [{
-      title: '生效成本',
+      title: '当前生效成本',
       dataIndex: 'cost',
       width: 100,
       render: (v: number) => <Text type="warning">¥{v}</Text>,
@@ -218,7 +218,7 @@ export default function PackageTemplateEditor({ packageId, user }: Props) {
         <Form.Item label="描述">
           <Input.TextArea rows={2} value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
         </Form.Item>
-        <Form.Item label="基础价格（固定价模式使用）">
+        <Form.Item label="套餐基础价（固定价模式使用）">
           <InputNumber
             value={editBasePrice}
             onChange={(v) => setEditBasePrice(v || 0)}
@@ -234,7 +234,7 @@ export default function PackageTemplateEditor({ packageId, user }: Props) {
 
       <div style={{ marginBottom: 12 }}>
         <Text type="secondary">
-          套餐项的“生效售价”由默认规格、覆盖价和菜品原价共同决定，覆盖价只影响当前套餐。
+          套餐项的“当前生效售价”由使用规格与套餐售价覆盖共同决定，覆盖价只影响当前套餐。
         </Text>
       </div>
 
@@ -310,21 +310,21 @@ export default function PackageTemplateEditor({ packageId, user }: Props) {
             <Form.Item label="菜品">
               <Input value={editingItem.dish_name} disabled />
             </Form.Item>
-            <Form.Item label="默认规格" name="default_spec_id">
+            <Form.Item label="使用规格" name="default_spec_id">
               <Select
                 allowClear
-                placeholder={editingItem.specs.length > 0 ? '选择规格' : '暂无可选规格'}
+                placeholder={editingItem.specs.length > 0 ? '选择使用规格' : '暂无可选规格'}
                 disabled={editingItem.specs.length === 0}
                 options={editingItem.specs.map((spec) => ({
                   value: spec.id,
-                  label: `${spec.spec_name} ¥${spec.price}`,
+                  label: spec.spec_name,
                 }))}
               />
             </Form.Item>
             <Form.Item label="数量" name="default_quantity" rules={[{ required: true, message: '请输入数量' }]}>
               <InputNumber min={1} precision={0} style={{ width: '100%' }} />
             </Form.Item>
-            <Form.Item label="套餐内售价覆盖" name="override_price">
+            <Form.Item label="套餐售价覆盖" name="override_price">
               <InputNumber min={0} precision={2} style={{ width: '100%' }} addonAfter="元/份" />
             </Form.Item>
             <div style={{ padding: 12, borderRadius: 12, background: '#fafafa' }}>

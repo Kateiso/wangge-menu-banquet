@@ -56,7 +56,8 @@ def setup_test_db():
 @pytest.fixture()
 def client(setup_test_db):
     from backend.main import app
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 def _login(client: TestClient, username: str, password: str) -> str | None:
@@ -183,8 +184,9 @@ class TestDishCreate:
         payload = {
             "name": "椒盐九肚鱼",
             "category": "热菜",
-            "price": 128.0,
-            "price_text": "128元/例",
+            "default_spec_name": "标准",
+            "default_spec_price": 128.0,
+            "default_spec_cost": 52.0,
             "serving_unit": "例",
             "serving_split": 0,
             "is_signature": True,
@@ -195,15 +197,23 @@ class TestDishCreate:
         data = res.json()
         assert data["name"] == payload["name"]
         assert data["category"] == payload["category"]
-        assert data["cost"] == 48.64  # 128 * 热菜0.38
-        assert data["min_price"] == 63.23  # 48.64 * 1.3
+        assert data["cost"] == 52.0
+        assert data["price"] == 128.0
+        assert data["min_price"] == 67.6
         assert data["is_active"] is True
+
+        specs = client.get(f"/api/dishes/{data['id']}/specs", headers=_auth_header(token))
+        assert specs.status_code == 200
+        specs_data = specs.json()
+        assert len(specs_data) == 1
+        assert specs_data[0]["spec_name"] == "标准"
+        assert specs_data[0]["is_default"] is True
 
     def test_staff_cannot_create_dish(self, client):
         token = _login(client, "chef", "chef123")
         res = client.post(
             "/api/dishes",
-            json={"name": "新菜", "category": "凉菜", "price": 68.0, "price_text": "68元/例"},
+            json={"name": "新菜", "category": "凉菜", "default_spec_price": 68.0},
             headers=_auth_header(token),
         )
         assert res.status_code == 403
@@ -211,7 +221,7 @@ class TestDishCreate:
     def test_create_requires_auth(self, client):
         res = client.post(
             "/api/dishes",
-            json={"name": "无权限菜", "category": "凉菜", "price": 68.0, "price_text": "68元/例"},
+            json={"name": "无权限菜", "category": "凉菜", "default_spec_price": 68.0},
         )
         assert res.status_code == 401
 
@@ -226,12 +236,12 @@ class TestDishUpdatePermissions:
 
     # ── Admin: can modify everything ────────────────────────────────────────
 
-    def test_admin_can_update_cost(self, client):
-        """Admin can change dish cost."""
+    def test_admin_cannot_update_cost_from_dish(self, client):
+        """Cost must be maintained on spec rows, not on dish."""
         token = _login(client, "admin", "wangge2026")
         res = client.put("/api/dishes/1", json={"cost": 55.0}, headers=_auth_header(token))
-        assert res.status_code == 200
-        assert res.json()["cost"] == 55.0
+        assert res.status_code == 400
+        assert res.json()["detail"] == "菜品价格和成本请在规格中维护"
 
     def test_admin_can_toggle_active(self, client):
         """Admin can toggle dish active status."""
@@ -242,31 +252,16 @@ class TestDishUpdatePermissions:
         # restore
         client.put("/api/dishes/1", json={"is_active": True}, headers=_auth_header(token))
 
-    def test_admin_can_update_price(self, client):
-        """Admin can change dish price."""
+    def test_admin_cannot_update_price_from_dish(self, client):
+        """Price must be maintained on spec rows, not on dish."""
         token = _login(client, "admin", "wangge2026")
         res = client.put("/api/dishes/1", json={"price": 138.0, "price_text": "138元/例"}, headers=_auth_header(token))
-        assert res.status_code == 200
-        assert res.json()["price"] == 138.0
+        assert res.status_code == 400
+        assert res.json()["detail"] == "菜品价格和成本请在规格中维护"
 
     def test_admin_cannot_update_price_or_cost_from_dish_when_active_specs_exist(self, client):
-        """When specs exist, price/cost must be maintained on spec rows only."""
+        """Dish-level price/cost updates are rejected consistently."""
         token = _login(client, "admin", "wangge2026")
-        create_spec_res = client.post(
-            "/api/dishes/1/specs",
-            json={
-                "spec_name": "例牌",
-                "price": 128.0,
-                "price_text": "128元/例",
-                "cost": 48.64,
-                "min_people": 0,
-                "max_people": 0,
-                "is_default": True,
-                "sort_order": 0,
-            },
-            headers=_auth_header(token),
-        )
-        assert create_spec_res.status_code == 201
 
         res = client.put(
             "/api/dishes/1",
@@ -274,7 +269,20 @@ class TestDishUpdatePermissions:
             headers=_auth_header(token),
         )
         assert res.status_code == 400
-        assert res.json()["detail"] == "该菜品已有规格，请在规格中维护价格和成本"
+        assert res.json()["detail"] == "菜品价格和成本请在规格中维护"
+
+    def test_admin_can_update_dish_metadata(self, client):
+        """Dish master data remains editable."""
+        token = _login(client, "admin", "wangge2026")
+        res = client.put(
+            "/api/dishes/1",
+            json={"name": "白灼虾（招牌）", "category": "热菜", "serving_unit": "份"},
+            headers=_auth_header(token),
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["name"] == "白灼虾（招牌）"
+        assert data["serving_unit"] == "份"
 
     # ── Staff: can only toggle is_active ────────────────────────────────────
 
@@ -322,15 +330,24 @@ class TestDishUpdatePermissions:
 class TestDataPersistence:
     """Verify that changes via API persist correctly."""
 
-    def test_cost_change_persists_in_listing(self, client):
-        """After updating cost, GET /dishes reflects the change."""
+    def test_spec_change_persists_in_dish_listing_cache(self, client):
+        """Updating the default spec should sync dish cache fields."""
         token = _login(client, "admin", "wangge2026")
-        # Update
-        client.put("/api/dishes/2", json={"cost": 30.0}, headers=_auth_header(token))
-        # Verify
+        specs = client.get("/api/dishes/2/specs", headers=_auth_header(token))
+        assert specs.status_code == 200
+        spec_id = specs.json()[0]["id"]
+
+        updated = client.put(
+            f"/api/dishes/specs/{spec_id}",
+            json={"price": 58.0, "cost": 18.5, "is_default": True},
+            headers=_auth_header(token),
+        )
+        assert updated.status_code == 200
+
         res = client.get("/api/dishes", headers=_auth_header(token))
         dish2 = next(d for d in res.json() if d["id"] == 2)
-        assert dish2["cost"] == 30.0
+        assert dish2["price"] == 58.0
+        assert dish2["cost"] == 18.5
 
     def test_deactivated_dish_excluded_from_active_filter(self, client):
         """Deactivated dish is excluded when active_only filter is used."""
@@ -392,3 +409,24 @@ def test_batch_specs_returns_dict_keyed_by_dish_id(client, auth_headers):
     assert isinstance(data, dict)
     for key in data:
         assert isinstance(data[key], list)
+
+
+def test_startup_backfills_standard_spec_for_seeded_dishes(client, auth_headers):
+    """Startup should backfill a single default spec for legacy dish rows."""
+    res = client.get("/api/dishes/1/specs", headers=auth_headers)
+    assert res.status_code == 200
+    specs = res.json()
+    assert len(specs) == 1
+    assert specs[0]["spec_name"] == "标准"
+    assert specs[0]["is_default"] is True
+
+
+def test_cannot_delete_last_spec(client, auth_headers):
+    """A dish must always keep at least one active spec."""
+    specs = client.get("/api/dishes/1/specs", headers=auth_headers)
+    assert specs.status_code == 200
+    spec_id = specs.json()[0]["id"]
+
+    res = client.delete(f"/api/dishes/specs/{spec_id}", headers=auth_headers)
+    assert res.status_code == 400
+    assert res.json()["detail"] == "至少需要保留一个规格"

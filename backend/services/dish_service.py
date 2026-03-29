@@ -20,6 +20,15 @@ def get_category_cost_ratio(category: str) -> float:
     return CATEGORY_COST_RATIO.get(category, 0.35)
 
 
+def calculate_min_price(cost: float) -> float:
+    return round(cost * 1.3, 2)
+
+
+def build_price_text(price: float, serving_unit: str) -> str:
+    unit = (serving_unit or "例").strip() or "例"
+    return f"{round(price, 2):.2f}元/{unit}"
+
+
 def _extract_serving_unit(price_text: str) -> str:
     match = re.search(r"元/([^\s/]+)", price_text)
     return match.group(1).strip() if match else ""
@@ -137,7 +146,7 @@ def import_dishes_from_csv(session: Session) -> int:
             name_hash = int(hashlib.md5(name.encode()).hexdigest()[:8], 16)
             jitter = ((name_hash % 160) - 80) / 1000  # -0.08 ~ +0.08
             cost = round(price * max(0.15, min(0.55, ratio + jitter)), 2)
-            min_price = round(cost * 1.3, 2)
+            min_price = calculate_min_price(cost)
 
             dish = Dish(
                 name=name,
@@ -173,6 +182,114 @@ def get_dishes_by_category(session: Session) -> dict[str, list[Dish]]:
     return grouped
 
 
+def _list_active_specs(session: Session, dish_id: int) -> list[DishSpec]:
+    return list(session.exec(
+        select(DishSpec)
+        .where(DishSpec.dish_id == dish_id, DishSpec.is_active == True)
+        .order_by(DishSpec.sort_order, DishSpec.id)
+    ).all())
+
+
+def get_default_spec(session: Session, dish_id: int) -> DishSpec | None:
+    specs = _list_active_specs(session, dish_id)
+    for spec in specs:
+        if spec.is_default:
+            return spec
+    return specs[0] if specs else None
+
+
+def _sync_dish_cache_from_spec(dish: Dish, spec: DishSpec) -> None:
+    dish.price = round(spec.price, 2)
+    dish.price_text = (spec.price_text or build_price_text(spec.price, dish.serving_unit or "例")).strip()
+    dish.cost = round(spec.cost, 2)
+    dish.min_price = calculate_min_price(dish.cost)
+    dish.is_market_price = "时价" in dish.price_text
+
+
+def _apply_default_spec(session: Session, dish: Dish, specs: list[DishSpec], chosen_id: int) -> DishSpec:
+    chosen: DishSpec | None = None
+    for spec in specs:
+        if not (spec.price_text or "").strip():
+            spec.price_text = build_price_text(spec.price, dish.serving_unit or "例")
+        should_be_default = spec.id == chosen_id
+        if spec.is_default != should_be_default:
+            spec.is_default = should_be_default
+        session.add(spec)
+        if should_be_default:
+            chosen = spec
+
+    if chosen is None:
+        raise ValueError("默认规格不存在")
+
+    _sync_dish_cache_from_spec(dish, chosen)
+    session.add(dish)
+    return chosen
+
+
+def ensure_dish_spec_consistency(
+    session: Session,
+    dish_id: int,
+    *,
+    create_default_if_missing: bool = False,
+) -> DishSpec:
+    dish = session.get(Dish, dish_id)
+    if not dish:
+        raise ValueError("菜品不存在")
+
+    specs = _list_active_specs(session, dish_id)
+    if not specs:
+        if not create_default_if_missing:
+            raise ValueError("至少需要保留一个规格")
+
+        spec = DishSpec(
+            dish_id=dish_id,
+            spec_name="标准",
+            price=round(dish.price, 2),
+            price_text=(dish.price_text or build_price_text(dish.price, dish.serving_unit or "例")).strip(),
+            cost=round(dish.cost, 2),
+            min_people=0,
+            max_people=0,
+            is_default=True,
+            sort_order=0,
+            is_active=True,
+        )
+        session.add(spec)
+        session.flush()
+        specs = [spec]
+
+    chosen = next((spec for spec in specs if spec.is_default), None) or specs[0]
+    return _apply_default_spec(session, dish, specs, chosen.id)  # type: ignore[arg-type]
+
+
+def ensure_all_dishes_have_default_specs(session: Session) -> dict[str, int]:
+    summary = {
+        "created_specs": 0,
+        "normalized_defaults": 0,
+        "synced_dishes": 0,
+    }
+
+    dishes = list(session.exec(select(Dish)).all())
+    for dish in dishes:
+        active_specs = _list_active_specs(session, dish.id)  # type: ignore[arg-type]
+        default_ids_before = [spec.id for spec in active_specs if spec.is_default]
+        if not active_specs:
+            summary["created_specs"] += 1
+
+        chosen = ensure_dish_spec_consistency(
+            session,
+            dish.id,  # type: ignore[arg-type]
+            create_default_if_missing=True,
+        )
+
+        default_ids_after = [spec.id for spec in _list_active_specs(session, dish.id) if spec.is_default]  # type: ignore[arg-type]
+        if len(default_ids_before) != 1 or default_ids_before != default_ids_after:
+            summary["normalized_defaults"] += 1
+        if chosen:
+            summary["synced_dishes"] += 1
+
+    return summary
+
+
 # ── DishSpec CRUD ──
 
 def list_specs(session: Session, dish_id: int) -> list[DishSpec]:
@@ -187,8 +304,40 @@ def create_spec(session: Session, dish_id: int, **kwargs) -> DishSpec:
     dish = session.get(Dish, dish_id)
     if not dish:
         raise ValueError("菜品不存在")
-    spec = DishSpec(dish_id=dish_id, **kwargs)
+
+    existing_specs = _list_active_specs(session, dish_id)
+    price = round(float(kwargs.get("price", 0.0) or 0.0), 2)
+    if price <= 0:
+        raise ValueError("规格价格必须大于0")
+
+    spec_name = (kwargs.get("spec_name") or "").strip()
+    if not spec_name:
+        raise ValueError("规格名称不能为空")
+
+    cost = kwargs.get("cost")
+    if cost is None:
+        cost = round(price * get_category_cost_ratio(dish.category), 2)
+
+    spec = DishSpec(
+        dish_id=dish_id,
+        spec_name=spec_name,
+        price=price,
+        price_text=(kwargs.get("price_text") or build_price_text(price, dish.serving_unit or "例")).strip(),
+        cost=round(float(cost), 2),
+        min_people=max(0, int(kwargs.get("min_people", 0) or 0)),
+        max_people=max(0, int(kwargs.get("max_people", 0) or 0)),
+        is_default=bool(kwargs.get("is_default", False)),
+        sort_order=int(kwargs.get("sort_order", 0) or 0),
+        is_active=True,
+    )
     session.add(spec)
+    session.flush()
+
+    if not existing_specs or spec.is_default:
+        _apply_default_spec(session, dish, _list_active_specs(session, dish_id), spec.id)  # type: ignore[arg-type]
+    else:
+        ensure_dish_spec_consistency(session, dish_id, create_default_if_missing=True)
+
     session.commit()
     session.refresh(spec)
     return spec
@@ -198,10 +347,56 @@ def update_spec(session: Session, spec_id: int, **kwargs) -> DishSpec:
     spec = session.get(DishSpec, spec_id)
     if not spec:
         raise ValueError("规格不存在")
-    for k, v in kwargs.items():
-        if v is not None:
-            setattr(spec, k, v)
+
+    dish = session.get(Dish, spec.dish_id)
+    if not dish:
+        raise ValueError("菜品不存在")
+
+    if "spec_name" in kwargs and kwargs["spec_name"] is not None:
+        spec_name = str(kwargs["spec_name"]).strip()
+        if not spec_name:
+            raise ValueError("规格名称不能为空")
+        spec.spec_name = spec_name
+
+    if "price" in kwargs and kwargs["price"] is not None:
+        price = round(float(kwargs["price"]), 2)
+        if price <= 0:
+            raise ValueError("规格价格必须大于0")
+        spec.price = price
+        if "price_text" not in kwargs:
+            spec.price_text = build_price_text(price, dish.serving_unit or "例")
+
+    if "price_text" in kwargs and kwargs["price_text"] is not None:
+        spec.price_text = str(kwargs["price_text"]).strip() or build_price_text(spec.price, dish.serving_unit or "例")
+
+    if "cost" in kwargs and kwargs["cost"] is not None:
+        spec.cost = round(float(kwargs["cost"]), 2)
+
+    if "min_people" in kwargs and kwargs["min_people"] is not None:
+        spec.min_people = max(0, int(kwargs["min_people"]))
+    if "max_people" in kwargs and kwargs["max_people"] is not None:
+        spec.max_people = max(0, int(kwargs["max_people"]))
+    if "sort_order" in kwargs and kwargs["sort_order"] is not None:
+        spec.sort_order = int(kwargs["sort_order"])
+    if "is_active" in kwargs and kwargs["is_active"] is not None:
+        if not kwargs["is_active"] and len(_list_active_specs(session, spec.dish_id)) <= 1 and spec.is_active:
+            raise ValueError("至少需要保留一个规格")
+        spec.is_active = bool(kwargs["is_active"])
+    if "is_default" in kwargs and kwargs["is_default"] is not None:
+        spec.is_default = bool(kwargs["is_default"])
+
     session.add(spec)
+    session.flush()
+
+    active_specs = _list_active_specs(session, spec.dish_id)
+    if not active_specs:
+        raise ValueError("至少需要保留一个规格")
+
+    if spec.is_active and kwargs.get("is_default") is True:
+        _apply_default_spec(session, dish, active_specs, spec.id)  # type: ignore[arg-type]
+    else:
+        ensure_dish_spec_consistency(session, spec.dish_id, create_default_if_missing=False)
+
     session.commit()
     session.refresh(spec)
     return spec
@@ -211,5 +406,10 @@ def delete_spec(session: Session, spec_id: int) -> None:
     spec = session.get(DishSpec, spec_id)
     if not spec:
         raise ValueError("规格不存在")
+    active_specs = _list_active_specs(session, spec.dish_id)
+    if len(active_specs) <= 1:
+        raise ValueError("至少需要保留一个规格")
     session.delete(spec)
+    session.flush()
+    ensure_dish_spec_consistency(session, spec.dish_id, create_default_if_missing=False)
     session.commit()

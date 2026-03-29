@@ -16,7 +16,7 @@ from backend.models.menu import Menu, MenuItem  # noqa: F401
 from backend.models.package import PackageGroup, Package, PackageItem  # noqa: F401
 from backend.models.conversation import MenuConversation  # noqa: F401
 from backend.models.user import User, create_default_users  # noqa: F401
-from backend.services.dish_service import import_dishes_from_csv
+from backend.services.dish_service import import_dishes_from_csv, ensure_all_dishes_have_default_specs
 from backend.db_migrations import run_sqlite_compat_migrations
 from backend.routers.menu import router as menu_router
 from backend.routers.auth import router as auth_router
@@ -39,6 +39,14 @@ async def lifespan(app: FastAPI):
             logger.info(f"已导入 {count} 道菜品")
         else:
             logger.info("菜品数据已存在或无需导入")
+
+        spec_summary = ensure_all_dishes_have_default_specs(session)
+        session.commit()
+        logger.info(
+            "规格一致性检查完成: 新建标准规格 %s 条, 修正默认规格 %s 条",
+            spec_summary["created_specs"],
+            spec_summary["normalized_defaults"],
+        )
 
         create_default_users(session)
 

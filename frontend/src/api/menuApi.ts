@@ -61,6 +61,16 @@ export interface Dish {
   serving_split?: number;
 }
 
+export interface DishUpdateData {
+  name?: string;
+  category?: string;
+  is_active?: boolean;
+  is_signature?: boolean;
+  is_must_order?: boolean;
+  serving_unit?: string;
+  serving_split?: number;
+}
+
 export async function getDishes(params?: { category?: string; active_only?: boolean }): Promise<Dish[]> {
   const url = new URL(`${window.location.origin}${BASE}/api/dishes`);
   if (params?.category) url.searchParams.set("category", params.category);
@@ -70,13 +80,13 @@ export async function getDishes(params?: { category?: string; active_only?: bool
   return res.json();
 }
 
-export async function updateDish(id: number, updates: Partial<Dish>): Promise<Dish> {
+export async function updateDish(id: number, updates: DishUpdateData): Promise<Dish> {
   const res = await fetch(`${BASE}/api/dishes/${id}`, {
     method: 'PUT',
     headers: headers(),
     body: JSON.stringify(updates),
   });
-  if (!res.ok) throw new Error("更新菜品失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, "更新菜品失败"));
   return res.json();
 }
 
@@ -85,6 +95,15 @@ export interface DishCreateData {
   category: string;
   price: number;
   price_text: string;
+  serving_unit?: string;
+  serving_split?: number;
+  is_signature?: boolean;
+  is_must_order?: boolean;
+  default_spec_name: string;
+  default_spec_price: number;
+  default_spec_cost: number;
+  default_spec_min_people?: number;
+  default_spec_max_people?: number;
 }
 
 export async function createDish(data: DishCreateData): Promise<Dish> {
@@ -134,7 +153,7 @@ export async function createDishSpec(dishId: number, data: Omit<DishSpec, 'id' |
     headers: headers(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("创建规格失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, "创建规格失败"));
   return res.json();
 }
 
@@ -144,7 +163,7 @@ export async function updateDishSpec(specId: number, data: Partial<DishSpec>): P
     headers: headers(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("更新规格失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, "更新规格失败"));
   return res.json();
 }
 
@@ -153,7 +172,7 @@ export async function deleteDishSpec(specId: number): Promise<void> {
     method: 'DELETE',
     headers: headers(),
   });
-  if (!res.ok) throw new Error("删除规格失败");
+  if (!res.ok) throw new Error(await readErrorMessage(res, "删除规格失败"));
 }
 
 // ── Package ──
