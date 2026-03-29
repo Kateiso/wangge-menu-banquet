@@ -77,6 +77,8 @@ def api_generate_menu(
     """生成 AI 推荐菜单"""
     try:
         menu, items = generate_menu(session, request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"菜单生成失败: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"菜单生成失败: {str(e)}")
     return _build_menu_response(menu, items, role=current_user.role)
