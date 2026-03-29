@@ -138,7 +138,7 @@ DEFAULT_MARGIN=55          # Default target margin %
 
 ## Git Workflow
 
-- **onweb**: production branch
+- **master**: production branch
 - Conventional Commits: `type(scope): summary`
 
 ## Release Trigger
